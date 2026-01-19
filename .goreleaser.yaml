@@ -1,0 +1,196 @@
+# GoReleaser configuration for P2P Playground Lite
+# Documentation: https://goreleaser.com
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: controller
+    main: ./cmd/controller
+    binary: controller
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  - id: daemon
+    main: ./cmd/daemon
+    binary: daemon
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: controller-archive
+    ids:
+      - controller
+    name_template: >-
+      controller_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - configs/controller.example.yaml
+
+  - id: daemon-archive
+    ids:
+      - daemon
+    name_template: >-
+      daemon_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - configs/daemon.example.yaml
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^build:'
+      - '^chore:'
+      - 'README'
+      - Merge pull request
+      - Merge branch
+
+release:
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  header: |
+    ## P2P Playground Lite {{.Tag}} ({{.Date}})
+
+    P2P 网络分布式应用测试和部署工具。
+  footer: |
+    ## 安装说明
+
+    ### macOS (ARM64 - M1/M2/M3)
+    ```bash
+    # 下载并解压
+    tar -xzf controller_Darwin_arm64.tar.gz
+    tar -xzf daemon_Darwin_arm64.tar.gz
+
+    # 赋予执行权限
+    chmod +x controller daemon
+
+    # 验证安装
+    ./controller --help
+    ./daemon --help
+    ```
+
+    ### macOS (Intel)
+    ```bash
+    tar -xzf controller_Darwin_x86_64.tar.gz
+    tar -xzf daemon_Darwin_x86_64.tar.gz
+    chmod +x controller daemon
+    ```
+
+    ### Linux (AMD64)
+    ```bash
+    tar -xzf controller_Linux_x86_64.tar.gz
+    tar -xzf daemon_Linux_x86_64.tar.gz
+    chmod +x controller daemon
+    ```
+
+    ### Linux (ARM64)
+    ```bash
+    tar -xzf controller_Linux_arm64.tar.gz
+    tar -xzf daemon_Linux_arm64.tar.gz
+    chmod +x controller daemon
+    ```
+
+    ### Windows (AMD64)
+    ```powershell
+    # 解压 zip 文件后运行
+    .\controller.exe --help
+    .\daemon.exe --help
+    ```
+
+    ## 快速开始
+
+    ### 1. 生成 PSK（可选，用于私有网络）
+    ```bash
+    ./controller psk
+    # 将生成的 PSK 配置到 controller 和 daemon
+    ```
+
+    ### 2. 启动 Daemon（在目标节点上）
+    ```bash
+    ./daemon start
+    ```
+
+    ### 3. 发现节点
+    ```bash
+    ./controller nodes
+    ```
+
+    ### 4. 部署应用
+    ```bash
+    # 生成签名密钥
+    ./controller keygen
+
+    # 签名应用包
+    ./controller sign myapp-1.0.0.tar.gz
+
+    # 部署到节点
+    ./controller deploy myapp-1.0.0.tar.gz
+    ```
+
+    完整文档请查看 [README.md](https://github.com/asjdf/p2p-playground-lite)
+
+# macOS 通用二进制（Intel + Apple Silicon）
+universal_binaries:
+  - id: controller-universal
+    ids:
+      - controller
+    replace: false
+  - id: daemon-universal
+    ids:
+      - daemon
+    replace: false
