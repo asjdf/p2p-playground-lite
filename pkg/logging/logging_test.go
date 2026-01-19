@@ -28,10 +28,10 @@ func TestNewLogger(t *testing.T) {
 
 func TestLoggerLevels(t *testing.T) {
 	tests := []struct {
-		name          string
-		level         string
-		logFunc       func(types.Logger)
-		shouldOutput  bool
+		name         string
+		level        string
+		logFunc      func(types.Logger)
+		shouldOutput bool
 	}{
 		{
 			name:  "debug level logs debug",

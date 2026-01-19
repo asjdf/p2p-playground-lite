@@ -12,7 +12,7 @@ import (
 
 const (
 	protocolID  = "/p2p-playground/transfer/1.0.0"
-	chunkSize   = 64 * 1024 // 64KB chunks
+	chunkSize   = 64 * 1024          // 64KB chunks
 	maxFileSize = 1024 * 1024 * 1024 // 1GB max
 )
 
@@ -42,7 +42,7 @@ func (m *Manager) Send(ctx context.Context, peerID string, filePath string, prog
 	if err != nil {
 		return types.WrapError(err, "failed to open file")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Get file info
 	fileInfo, err := file.Stat()
@@ -60,7 +60,7 @@ func (m *Manager) Send(ctx context.Context, peerID string, filePath string, prog
 	if err != nil {
 		return types.WrapError(err, "failed to create stream")
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Send file size first
 	if err := binary.Write(stream, binary.BigEndian, fileSize); err != nil {
@@ -120,7 +120,7 @@ func (m *Manager) Receive(ctx context.Context, stream types.Stream, destPath str
 	if err != nil {
 		return types.WrapError(err, "failed to create file")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Receive file in chunks
 	buf := make([]byte, chunkSize)
@@ -163,7 +163,7 @@ func (m *Manager) Receive(ctx context.Context, stream types.Stream, destPath str
 
 // handleIncomingStream handles incoming transfer streams
 func (m *Manager) handleIncomingStream(stream types.Stream) {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	m.logger.Info("incoming file transfer")
 

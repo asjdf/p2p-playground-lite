@@ -177,7 +177,7 @@ func HashFile(filePath string) ([]byte, error) {
 	if err != nil {
 		return nil, types.WrapError(err, "failed to open file")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {

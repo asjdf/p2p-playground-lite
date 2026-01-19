@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	cfgFile       string
-	globalConfig  *config.ControllerConfig
-	globalLogger  types.Logger
+	cfgFile      string
+	globalConfig *config.ControllerConfig
+	globalLogger types.Logger
 )
 
 // createP2PHost creates a P2P host using global configuration
@@ -102,7 +102,7 @@ If --node is not specified, the package will be deployed to the first discovered
 		if err != nil {
 			return err
 		}
-		defer host.Close()
+		defer func() { _ = host.Close() }()
 
 		fmt.Printf("Controller ID: %s\n", host.ID())
 
@@ -159,7 +159,7 @@ If --node is not specified, applications from the first discovered node will be 
 		if err != nil {
 			return err
 		}
-		defer host.Close()
+		defer func() { _ = host.Close() }()
 
 		// Wait for peer discovery
 		fmt.Println("Discovering nodes...")
@@ -223,7 +223,7 @@ var logsCmd = &cobra.Command{
 If --node is not specified, logs will be fetched from the first discovered node.
 Use --tail to limit the number of lines shown.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error{
+	RunE: func(cmd *cobra.Command, args []string) error {
 		appID := args[0]
 		fmt.Printf("Fetching logs for application: %s\n", appID)
 
@@ -233,7 +233,7 @@ Use --tail to limit the number of lines shown.`,
 		if err != nil {
 			return err
 		}
-		defer host.Close()
+		defer func() { _ = host.Close() }()
 
 		// Wait for peer discovery
 		fmt.Println("Discovering nodes...")
@@ -255,7 +255,7 @@ Use --tail to limit the number of lines shown.`,
 		}
 
 		// Fetch logs
-		fmt.Println("\nFetching logs...\n")
+		fmt.Println("\nFetching logs...")
 		logs, err := fetchLogs(ctx, host, targetPeerID, appID, logsFollow, logsTail, globalLogger)
 		if err != nil {
 			return fmt.Errorf("failed to fetch logs: %w", err)
@@ -280,7 +280,7 @@ var nodesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer host.Close()
+		defer func() { _ = host.Close() }()
 
 		fmt.Printf("Controller ID: %s\n", host.ID())
 		fmt.Printf("Controller addresses:\n")
@@ -389,14 +389,14 @@ func deployPackage(ctx context.Context, host *p2p.Host, peerID string, packagePa
 	if err != nil {
 		return "", fmt.Errorf("failed to open package: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create stream to target peer
 	stream, err := host.NewStream(ctx, peerID, consts.DeployProtocolID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Load signature if exists
 	var signature []byte
@@ -502,7 +502,7 @@ func listApplications(ctx context.Context, host *p2p.Host, peerID string, logger
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	logger.Info("requesting application list", "peer", peerID)
 
@@ -552,7 +552,7 @@ func fetchLogs(ctx context.Context, host *p2p.Host, peerID string, appID string,
 	if err != nil {
 		return "", fmt.Errorf("failed to create stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Prepare request
 	req := LogsRequest{

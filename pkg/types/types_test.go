@@ -49,8 +49,8 @@ func TestNewAppError(t *testing.T) {
 
 func TestAppErrorWithField(t *testing.T) {
 	err := types.NewAppError("TEST_ERROR", "test message", nil)
-	err.WithField("app_id", "test-app")
-	err.WithField("count", 42)
+	err = err.WithField("app_id", "test-app")
+	err = err.WithField("count", 42)
 
 	if err.Fields["app_id"] != "test-app" {
 		t.Errorf("field app_id = %v, want 'test-app'", err.Fields["app_id"])

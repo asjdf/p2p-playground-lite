@@ -126,7 +126,7 @@ func (d *Daemon) Stop() error {
 	}
 
 	if d.host != nil {
-		d.host.Close()
+		_ = d.host.Close()
 	}
 
 	d.logger.Info("daemon stopped")
@@ -216,7 +216,7 @@ type DeployResponse struct {
 
 // handleDeployRequest handles incoming deploy requests
 func (d *Daemon) handleDeployRequest(stream types.Stream) {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	d.logger.Info("received deploy request")
 
@@ -301,7 +301,7 @@ func (d *Daemon) receiveFile(stream types.Stream, destPath string, expectedSize 
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	buf := make([]byte, 64*1024) // 64KB chunks
 	var received int64
@@ -370,7 +370,7 @@ type ListAppsResponse struct {
 
 // handleListRequest handles incoming list apps requests
 func (d *Daemon) handleListRequest(stream types.Stream) {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	d.logger.Info("received list apps request")
 
@@ -431,7 +431,7 @@ type LogsResponse struct {
 
 // handleLogsRequest handles incoming logs requests
 func (d *Daemon) handleLogsRequest(stream types.Stream) {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	d.logger.Info("received logs request")
 
@@ -466,7 +466,7 @@ func (d *Daemon) handleLogsRequest(stream types.Stream) {
 		d.sendLogsResponse(stream, false, "", err.Error())
 		return
 	}
-	defer logsReader.Close()
+	defer func() { _ = logsReader.Close() }()
 
 	// Read all logs
 	logsBytes, err := io.ReadAll(logsReader)

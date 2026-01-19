@@ -92,7 +92,7 @@ func (r *Runtime) start(ctx context.Context, app *types.Application, autoRestart
 
 	stderrFile, err := os.OpenFile(stderrLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		stdoutFile.Close()
+		_ = stdoutFile.Close()
 		return types.WrapError(err, "failed to create stderr log")
 	}
 
@@ -101,8 +101,8 @@ func (r *Runtime) start(ctx context.Context, app *types.Application, autoRestart
 
 	// Start process
 	if err := cmd.Start(); err != nil {
-		stdoutFile.Close()
-		stderrFile.Close()
+		_ = stdoutFile.Close()
+		_ = stderrFile.Close()
 		return types.WrapError(err, "failed to start process")
 	}
 
@@ -159,8 +159,8 @@ func (r *Runtime) start(ctx context.Context, app *types.Application, autoRestart
 
 	// Monitor process in background
 	go func() {
-		defer stdoutFile.Close()
-		defer stderrFile.Close()
+		defer func() { _ = stdoutFile.Close() }()
+		defer func() { _ = stderrFile.Close() }()
 
 		err := cmd.Wait()
 
@@ -220,12 +220,13 @@ func convertHealthCheckConfig(hc *types.HealthCheckConfig) *health.Config {
 	// Parse endpoint for HTTP/TCP
 	if hc.Endpoint != "" {
 		// Simple parsing: port number for TCP, full URL for HTTP
-		if cfg.Type == health.CheckTypeHTTP {
+		switch cfg.Type {
+		case health.CheckTypeHTTP:
 			// Extract port from endpoint (assuming format like ":8080/health")
 			// For now, use default port 8080
 			cfg.HTTPPort = 8080
 			cfg.HTTPPath = hc.Endpoint
-		} else if cfg.Type == health.CheckTypeTCP {
+		case health.CheckTypeTCP:
 			// Extract port from endpoint (assuming format like ":8080")
 			cfg.TCPPort = 8080
 		}
@@ -268,7 +269,7 @@ func (r *Runtime) Stop(ctx context.Context, appID string) error {
 	// Wait for graceful shutdown (with timeout)
 	done := make(chan struct{})
 	go func() {
-		process.Wait()
+		_, _ = process.Wait()
 		close(done)
 	}()
 
@@ -278,7 +279,7 @@ func (r *Runtime) Stop(ctx context.Context, appID string) error {
 	case <-time.After(10 * time.Second):
 		// Force kill
 		r.logger.Warn("application did not stop gracefully, forcing kill", "app_id", appID)
-		process.Kill()
+		_ = process.Kill()
 	}
 
 	info.app.Status = types.AppStatusStopped
@@ -374,18 +375,18 @@ func (r *Runtime) Logs(ctx context.Context, appID string, follow bool) (io.ReadC
 	}
 
 	// Seek to end
-	file.Seek(0, io.SeekEnd)
+	_, _ = file.Seek(0, io.SeekEnd)
 
 	pr, pw := io.Pipe()
 
 	go func() {
-		defer file.Close()
-		defer pw.Close()
+		defer func() { _ = file.Close() }()
+		defer func() { _ = pw.Close() }()
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			pw.Write(scanner.Bytes())
-			pw.Write([]byte("\n"))
+			_, _ = pw.Write(scanner.Bytes())
+			_, _ = pw.Write([]byte("\n"))
 		}
 
 		// Keep checking for new lines
@@ -398,8 +399,8 @@ func (r *Runtime) Logs(ctx context.Context, appID string, follow bool) (io.ReadC
 				return
 			case <-ticker.C:
 				for scanner.Scan() {
-					pw.Write(scanner.Bytes())
-					pw.Write([]byte("\n"))
+					_, _ = pw.Write(scanner.Bytes())
+					_, _ = pw.Write([]byte("\n"))
 				}
 			}
 		}

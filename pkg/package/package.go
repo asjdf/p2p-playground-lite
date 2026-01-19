@@ -40,13 +40,13 @@ func (m *Manager) Pack(ctx context.Context, appDir string) (string, error) {
 	if err != nil {
 		return "", types.WrapError(err, "failed to create package file")
 	}
-	defer outFile.Close()
+	defer func() { _ = outFile.Close() }()
 
 	gzWriter := gzip.NewWriter(outFile)
-	defer gzWriter.Close()
+	defer func() { _ = gzWriter.Close() }()
 
 	tarWriter := tar.NewWriter(gzWriter)
-	defer tarWriter.Close()
+	defer func() { _ = tarWriter.Close() }()
 
 	// Walk directory and add files
 	err = filepath.Walk(appDir, func(path string, info os.FileInfo, err error) error {
@@ -83,7 +83,7 @@ func (m *Manager) Pack(ctx context.Context, appDir string) (string, error) {
 			if err != nil {
 				return err
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 
 			if _, err := io.Copy(tarWriter, file); err != nil {
 				return err
@@ -107,14 +107,14 @@ func (m *Manager) Unpack(ctx context.Context, pkgPath string, destDir string) (*
 	if err != nil {
 		return nil, types.WrapError(err, "failed to open package")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Create gzip reader
 	gzReader, err := gzip.NewReader(file)
 	if err != nil {
 		return nil, types.WrapError(err, "invalid gzip format")
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	// Create tar reader
 	tarReader := tar.NewReader(gzReader)
@@ -152,10 +152,10 @@ func (m *Manager) Unpack(ctx context.Context, pkgPath string, destDir string) (*
 			}
 
 			if _, err := io.Copy(outFile, tarReader); err != nil {
-				outFile.Close()
+				_ = outFile.Close()
 				return nil, types.WrapError(err, "failed to write file")
 			}
-			outFile.Close()
+			_ = outFile.Close()
 
 			// Read manifest if this is the manifest file
 			if header.Name == "manifest.yaml" {
@@ -189,13 +189,13 @@ func (m *Manager) GetManifest(ctx context.Context, pkgPath string) (*types.Manif
 	if err != nil {
 		return nil, types.WrapError(err, "failed to open package")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	gzReader, err := gzip.NewReader(file)
 	if err != nil {
 		return nil, types.WrapError(err, "invalid gzip format")
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
 
@@ -259,7 +259,7 @@ func (m *Manager) CalculateChecksum(pkgPath string) (string, error) {
 	if err != nil {
 		return "", types.WrapError(err, "failed to open package")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {

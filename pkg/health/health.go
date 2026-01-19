@@ -70,7 +70,7 @@ type Checker struct {
 	pid    int
 
 	// State
-	lastResult      *Result
+	lastResult       *Result
 	consecutiveFails int
 }
 
@@ -173,7 +173,7 @@ func (c *Checker) checkHTTP(ctx context.Context) (bool, string, error) {
 	if err != nil {
 		return false, fmt.Sprintf("HTTP check failed: %v", err), nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return false, fmt.Sprintf("HTTP check returned status %d", resp.StatusCode), nil
@@ -195,7 +195,7 @@ func (c *Checker) checkTCP(ctx context.Context) (bool, string, error) {
 	if err != nil {
 		return false, fmt.Sprintf("TCP connection failed: %v", err), nil
 	}
-	conn.Close()
+	_ = conn.Close()
 
 	return true, "TCP connection successful", nil
 }

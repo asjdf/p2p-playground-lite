@@ -22,10 +22,7 @@ func main() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case t := <-ticker.C:
-			fmt.Printf("[%s] Application is running...\n", t.Format("15:04:05"))
-		}
+	for t := range ticker.C {
+		fmt.Printf("[%s] Application is running...\n", t.Format("15:04:05"))
 	}
 }

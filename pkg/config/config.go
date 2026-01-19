@@ -280,66 +280,6 @@ func LoadControllerConfig(path string) (*ControllerConfig, error) {
 	return &controllerCfg, nil
 }
 
-// setDaemonDefaults sets default values for daemon configuration
-func setDaemonDefaults(cfg *Config) {
-	// Node defaults
-	cfg.SetDefault("node.listen_addrs", []string{"/ip4/0.0.0.0/tcp/9000", "/ip4/0.0.0.0/udp/9000/quic"})
-	cfg.SetDefault("node.enable_mdns", true)
-
-	// Storage defaults
-	cfg.SetDefault("storage.data_dir", "~/.p2p-playground")
-	cfg.SetDefault("storage.packages_dir", "~/.p2p-playground/packages")
-	cfg.SetDefault("storage.apps_dir", "~/.p2p-playground/apps")
-	cfg.SetDefault("storage.keys_dir", "~/.p2p-playground/keys")
-
-	// Runtime defaults
-	cfg.SetDefault("runtime.max_apps", 10)
-	cfg.SetDefault("runtime.log_retention_days", 7)
-	cfg.SetDefault("runtime.log_max_size_mb", 10)
-	cfg.SetDefault("runtime.log_max_files", 5)
-	cfg.SetDefault("runtime.enable_resource_limits", true)
-
-	// Logging defaults
-	cfg.SetDefault("logging.level", "info")
-	cfg.SetDefault("logging.format", "console")
-	cfg.SetDefault("logging.output_path", "stdout")
-	cfg.SetDefault("logging.error_output_path", "stderr")
-
-	// Security defaults
-	cfg.SetDefault("security.enable_auth", false)
-	cfg.SetDefault("security.auth_method", "psk")
-	cfg.SetDefault("security.allow_unsigned_packages", false)
-}
-
-// setControllerDefaults sets default values for controller configuration
-func setControllerDefaults(cfg *Config) {
-	// Node defaults
-	cfg.SetDefault("node.listen_addrs", []string{"/ip4/0.0.0.0/tcp/9001", "/ip4/0.0.0.0/udp/9001/quic"})
-	cfg.SetDefault("node.enable_mdns", true)
-
-	// Storage defaults
-	cfg.SetDefault("storage.data_dir", "~/.p2p-playground-controller")
-	cfg.SetDefault("storage.packages_dir", "~/.p2p-playground-controller/packages")
-	cfg.SetDefault("storage.keys_dir", "~/.p2p-playground-controller/keys")
-
-	// Logging defaults
-	cfg.SetDefault("logging.level", "info")
-	cfg.SetDefault("logging.format", "console")
-	cfg.SetDefault("logging.output_path", "stdout")
-	cfg.SetDefault("logging.error_output_path", "stderr")
-
-	// Security defaults
-	cfg.SetDefault("security.enable_auth", false)
-	cfg.SetDefault("security.auth_method", "psk")
-	cfg.SetDefault("security.allow_unsigned_packages", false)
-
-	// Deployment defaults
-	cfg.SetDefault("deployment.default_strategy", "immediate")
-	cfg.SetDefault("deployment.timeout", "5m")
-	cfg.SetDefault("deployment.retry_attempts", 3)
-	cfg.SetDefault("deployment.retry_delay", "10s")
-}
-
 // applyDaemonDefaults applies default values to daemon config after unmarshaling
 func applyDaemonDefaults(cfg *DaemonConfig) {
 	if len(cfg.Node.ListenAddrs) == 0 {
