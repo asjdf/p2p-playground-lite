@@ -53,18 +53,19 @@ This document outlines the architecture and implementation strategy for P2P Play
 - ⏳ Complete end-to-end testing documentation
 - ⏳ Prepare for Phase 2 (Security)
 
-**Phase 2: Security & Stability** (55%)
+**Phase 2: Security & Stability** (70%)
 - ✓ Ed25519 key generation and management
 - ✓ Package signing with controller sign command
 - ✓ Signature verification in daemon
 - ✓ **Controller configuration file support** (kubectl-style --config flag)
-- ✓ **Default mandatory signature verification** (require_signed_packages: true)
+- ✓ **Default mandatory signature verification** (allow_unsigned_packages: false)
 - ✓ **Health check module** (pkg/health: Process/HTTP/TCP checks)
 - ✓ Multi-key trust support
-- ⏸️ Health check integration with runtime
-- ⏸️ Auto-restart mechanism
+- ✓ **Health check integration with runtime** (monitoring from manifest config)
+- ✓ **Auto-restart mechanism** (StartWithAutoRestart() method)
 - ⏸️ PSK (Pre-Shared Key) authentication for P2P network
 - ⏸️ TLS 1.3 transport encryption (libp2p built-in, needs configuration)
+- ⏸️ Resource limiting (cgroups on Linux)
 
 ### ⏸️ Not Started
 
@@ -759,13 +760,69 @@ health_check:
 - Callback mechanism for unhealthy state
 - Continuous monitoring via `StartMonitoring()`
 
-**Status**: Base module complete, integration with runtime pending
+**Status**: ✅ Complete - Integrated with runtime (as of 2026-01-19)
 
-**Next Steps**:
-1. Integrate health checker into `pkg/runtime/`
-2. Start health monitoring after app launch
-3. Trigger auto-restart on persistent failures
-4. Add health status to `controller list` output
+**Integration Details**:
+- Health checker created automatically from manifest config
+- Monitoring starts in background when app starts
+- Cancels automatically when app stops
+- Reports health status in `Status()` API
+- Triggers auto-restart on failure (if enabled)
+
+### Auto-Restart Mechanism
+
+**Implementation**: Integrated into `pkg/runtime/runtime.go` (as of 2026-01-19)
+
+**Usage**:
+```go
+// Start with auto-restart enabled
+runtime.StartWithAutoRestart(ctx, app)
+
+// Or use normal Start (no auto-restart)
+runtime.Start(ctx, app)
+```
+
+**Behavior**:
+- When health check fails (exceeds retry threshold), runtime triggers automatic restart
+- Auto-restart preserves the setting across manual restarts
+- Unhealthy app is stopped gracefully before restart
+- Restart uses same configuration as original start
+- Logged as "application unhealthy, triggering restart"
+
+**Configuration** (from manifest.yaml):
+```yaml
+health_check:
+  type: process
+  interval: 30s
+  retries: 3
+
+# Auto-restart enabled via deployment flag
+# (passed to runtime.StartWithAutoRestart)
+```
+
+**Implementation Architecture**:
+- `appInfo` struct stores health checker and cancellation function
+- Health monitoring runs in separate goroutine
+- Unhealthy callback triggers `Restart()` in background goroutine
+- Process monitor goroutine cancels health monitoring on exit
+
+**Testing**:
+```bash
+# Create a manifest with health check
+cat > manifest.yaml <<EOF
+name: test-app
+version: 1.0.0
+entrypoint: bin/test
+health_check:
+  type: process
+  interval: 30s
+  timeout: 5s
+  retries: 3
+EOF
+
+# Deploy with auto-restart (future: via --auto-restart flag)
+# Currently integrated in daemon deployment logic
+```
 
 ## Security Considerations
 
