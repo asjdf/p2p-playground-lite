@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/asjdf/p2p-playground-lite/pkg/config"
@@ -67,7 +68,7 @@ func (d *Daemon) Start() error {
 	d.logger.Info("storage initialized", "path", d.config.Storage.DataDir)
 
 	// Load or generate keys
-	signer, err := security.LoadOrGenerateKeys(d.config.Storage.KeysDir)
+	signer, err := security.LoadOrGenerateKeys(d.config.Storage.KeysDir, "node")
 	if err != nil {
 		return fmt.Errorf("failed to load keys: %w", err)
 	}
@@ -197,6 +198,7 @@ type DeployRequest struct {
 	FileName  string `json:"file_name"`
 	FileSize  int64  `json:"file_size"`
 	AutoStart bool   `json:"auto_start"`
+	Signature []byte `json:"signature,omitempty"` // Ed25519 signature of the package file
 }
 
 // DeployResponse represents a deployment response
@@ -246,6 +248,24 @@ func (d *Daemon) handleDeployRequest(stream types.Stream) {
 		d.logger.Error("failed to receive file", "error", err)
 		d.sendDeployResponse(stream, false, "", err.Error())
 		return
+	}
+
+	// Verify signature if provided
+	if len(req.Signature) > 0 {
+		d.logger.Info("verifying package signature")
+		if err := d.verifyPackageSignature(pkgPath, req.Signature); err != nil {
+			d.logger.Error("signature verification failed", "error", err)
+			d.sendDeployResponse(stream, false, "", fmt.Sprintf("signature verification failed: %v", err))
+			return
+		}
+		d.logger.Info("package signature verified successfully")
+	} else if d.config.Security.RequireSignedPackages {
+		// No signature provided but signing is required
+		d.logger.Error("package signature required but not provided")
+		d.sendDeployResponse(stream, false, "", "package signature is required but not provided")
+		return
+	} else {
+		d.logger.Warn("package deployed without signature verification")
 	}
 
 	// Deploy package
@@ -524,4 +544,50 @@ func joinLines(lines []string) string {
 		}
 	}
 	return result
+}
+
+// verifyPackageSignature verifies the package signature against trusted public keys
+func (d *Daemon) verifyPackageSignature(packagePath string, signature []byte) error {
+	// Get public keys directory
+	pubKeysDir := d.config.Security.PublicKeysDir
+	if pubKeysDir == "" {
+		pubKeysDir = filepath.Join(d.config.Storage.KeysDir, "trusted")
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(pubKeysDir); os.IsNotExist(err) {
+		return fmt.Errorf("trusted public keys directory not found: %s", pubKeysDir)
+	}
+
+	// Try to verify with each public key in the directory
+	entries, err := os.ReadDir(pubKeysDir)
+	if err != nil {
+		return types.WrapError(err, "failed to read public keys directory")
+	}
+
+	if len(entries) == 0 {
+		return fmt.Errorf("no trusted public keys found in %s", pubKeysDir)
+	}
+
+	// Try each public key file
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".pub" {
+			continue
+		}
+
+		pubKeyPath := filepath.Join(pubKeysDir, entry.Name())
+		pubKey, err := security.LoadPublicKey(pubKeyPath)
+		if err != nil {
+			d.logger.Warn("failed to load public key", "file", entry.Name(), "error", err)
+			continue
+		}
+
+		// Try to verify with this public key
+		if err := security.VerifyFile(packagePath, signature, pubKey); err == nil {
+			d.logger.Info("signature verified", "public_key", entry.Name())
+			return nil
+		}
+	}
+
+	return types.ErrInvalidSignature
 }

@@ -347,6 +347,8 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(nodesCmd)
+	rootCmd.AddCommand(keygenCmd)
+	rootCmd.AddCommand(signCmd)
 }
 
 func Execute() error {
@@ -358,6 +360,7 @@ type DeployRequest struct {
 	FileName  string `json:"file_name"`
 	FileSize  int64  `json:"file_size"`
 	AutoStart bool   `json:"auto_start"`
+	Signature []byte `json:"signature,omitempty"` // Ed25519 signature of the package file
 }
 
 // DeployResponse represents a deployment response
@@ -383,11 +386,22 @@ func deployPackage(ctx context.Context, host *p2p.Host, peerID string, packagePa
 	}
 	defer stream.Close()
 
+	// Load signature if exists
+	var signature []byte
+	sigPath := packagePath + ".sig"
+	if sigData, err := os.ReadFile(sigPath); err == nil {
+		signature = sigData
+		logger.Info("package signature found", "sig_path", sigPath)
+	} else {
+		logger.Warn("no package signature found, deploying without signature verification")
+	}
+
 	// Prepare request
 	req := DeployRequest{
 		FileName:  filepath.Base(packagePath),
 		FileSize:  fileSize,
 		AutoStart: autoStart,
+		Signature: signature,
 	}
 
 	reqBytes, err := json.Marshal(req)
