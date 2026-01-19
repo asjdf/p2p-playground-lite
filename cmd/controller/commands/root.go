@@ -19,13 +19,31 @@ import (
 )
 
 var (
-	cfgFile string
+	cfgFile       string
+	globalConfig  *config.ControllerConfig
+	globalLogger  types.Logger
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "controller",
 	Short: "P2P Playground controller",
 	Long:  `Controller for P2P Playground - deploy and manage applications across P2P nodes.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Load configuration
+		var err error
+		globalConfig, err = loadConfig(cfgFile)
+		if err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
+
+		// Initialize logger
+		globalLogger, err = logging.New(&globalConfig.Logging)
+		if err != nil {
+			return fmt.Errorf("failed to initialize logger: %w", err)
+		}
+
+		return nil
+	},
 }
 
 var (
@@ -54,19 +72,12 @@ If --node is not specified, the package will be deployed to the first discovered
 			return fmt.Errorf("failed to access package file: %w", err)
 		}
 
-		// Create minimal config for controller
-		logCfg := &config.LoggingConfig{
-			Level:  "info",
-			Format: "console",
-		}
-		logger, err := logging.New(logCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create logger: %w", err)
-		}
+		// Use global logger
+		logger := globalLogger
 
-		// Create P2P host
+		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, []string{"/ip4/0.0.0.0/tcp/0"}, logger)
+		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
 		if err != nil {
 			return fmt.Errorf("failed to create P2P host: %w", err)
 		}
@@ -74,9 +85,11 @@ If --node is not specified, the package will be deployed to the first discovered
 
 		fmt.Printf("Controller ID: %s\n", host.ID())
 
-		// Enable mDNS discovery
-		if err := host.EnableMDNS(ctx); err != nil {
-			return fmt.Errorf("failed to enable mDNS: %w", err)
+		// Enable mDNS discovery if configured
+		if globalConfig.Node.EnableMDNS {
+			if err := host.EnableMDNS(ctx); err != nil {
+				return fmt.Errorf("failed to enable mDNS: %w", err)
+			}
 		}
 
 		// Wait for peer discovery
@@ -126,27 +139,22 @@ If --node is not specified, applications from the first discovered node will be 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Listing applications...")
 
-		// Create minimal config for controller
-		logCfg := &config.LoggingConfig{
-			Level:  "info",
-			Format: "console",
-		}
-		logger, err := logging.New(logCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create logger: %w", err)
-		}
+		// Use global logger
+		logger := globalLogger
 
-		// Create P2P host
+		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, []string{"/ip4/0.0.0.0/tcp/0"}, logger)
+		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
 		if err != nil {
 			return fmt.Errorf("failed to create P2P host: %w", err)
 		}
 		defer host.Close()
 
-		// Enable mDNS discovery
-		if err := host.EnableMDNS(ctx); err != nil {
-			return fmt.Errorf("failed to enable mDNS: %w", err)
+		// Enable mDNS discovery if configured
+		if globalConfig.Node.EnableMDNS {
+			if err := host.EnableMDNS(ctx); err != nil {
+				return fmt.Errorf("failed to enable mDNS: %w", err)
+			}
 		}
 
 		// Wait for peer discovery
@@ -215,27 +223,22 @@ Use --tail to limit the number of lines shown.`,
 		appID := args[0]
 		fmt.Printf("Fetching logs for application: %s\n", appID)
 
-		// Create minimal config for controller
-		logCfg := &config.LoggingConfig{
-			Level:  "info",
-			Format: "console",
-		}
-		logger, err := logging.New(logCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create logger: %w", err)
-		}
+		// Use global logger
+		logger := globalLogger
 
-		// Create P2P host
+		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, []string{"/ip4/0.0.0.0/tcp/0"}, logger)
+		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
 		if err != nil {
 			return fmt.Errorf("failed to create P2P host: %w", err)
 		}
 		defer host.Close()
 
-		// Enable mDNS discovery
-		if err := host.EnableMDNS(ctx); err != nil {
-			return fmt.Errorf("failed to enable mDNS: %w", err)
+		// Enable mDNS discovery if configured
+		if globalConfig.Node.EnableMDNS {
+			if err := host.EnableMDNS(ctx); err != nil {
+				return fmt.Errorf("failed to enable mDNS: %w", err)
+			}
 		}
 
 		// Wait for peer discovery
@@ -277,19 +280,12 @@ var nodesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Discovering P2P nodes...")
 
-		// Create minimal config for controller
-		logCfg := &config.LoggingConfig{
-			Level:  "info",
-			Format: "console",
-		}
-		logger, err := logging.New(logCfg)
-		if err != nil {
-			return fmt.Errorf("failed to create logger: %w", err)
-		}
+		// Use global logger
+		logger := globalLogger
 
-		// Create P2P host with random port
+		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, []string{"/ip4/0.0.0.0/tcp/0"}, logger)
+		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
 		if err != nil {
 			return fmt.Errorf("failed to create P2P host: %w", err)
 		}
@@ -302,9 +298,11 @@ var nodesCmd = &cobra.Command{
 		}
 		fmt.Println()
 
-		// Enable mDNS discovery
-		if err := host.EnableMDNS(ctx); err != nil {
-			return fmt.Errorf("failed to enable mDNS: %w", err)
+		// Enable mDNS discovery if configured
+		if globalConfig.Node.EnableMDNS {
+			if err := host.EnableMDNS(ctx); err != nil {
+				return fmt.Errorf("failed to enable mDNS: %w", err)
+			}
 		}
 
 		fmt.Println("Scanning for nodes via mDNS (waiting 5 seconds)...")
@@ -332,7 +330,7 @@ var nodesCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default: ~/.p2p-playground/controller.yaml)")
 
 	deployCmd.Flags().StringVar(&deployNodeID, "node", "", "target node peer ID")
 	deployCmd.Flags().BoolVar(&deployAutoStart, "start", true, "automatically start the application after deployment")
@@ -349,6 +347,36 @@ func init() {
 	rootCmd.AddCommand(nodesCmd)
 	rootCmd.AddCommand(keygenCmd)
 	rootCmd.AddCommand(signCmd)
+}
+
+// loadConfig loads the controller configuration
+func loadConfig(configPath string) (*config.ControllerConfig, error) {
+	// If no config file specified, try default location
+	if configPath == "" {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			defaultPath := filepath.Join(homeDir, ".p2p-playground", "controller.yaml")
+			if _, err := os.Stat(defaultPath); err == nil {
+				configPath = defaultPath
+			}
+		}
+	}
+
+	// Load config from file if it exists
+	if configPath != "" {
+		cfg, err := config.LoadControllerConfig(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config from %s: %w", configPath, err)
+		}
+		return cfg, nil
+	}
+
+	// Use defaults if no config file
+	cfg, err := config.LoadControllerConfig("")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load default config: %w", err)
+	}
+	return cfg, nil
 }
 
 func Execute() error {

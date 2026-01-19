@@ -308,7 +308,7 @@ func setDaemonDefaults(cfg *Config) {
 	// Security defaults
 	cfg.SetDefault("security.enable_auth", false)
 	cfg.SetDefault("security.auth_method", "psk")
-	cfg.SetDefault("security.require_signed_packages", false)
+	cfg.SetDefault("security.require_signed_packages", true)
 }
 
 // setControllerDefaults sets default values for controller configuration
@@ -331,7 +331,7 @@ func setControllerDefaults(cfg *Config) {
 	// Security defaults
 	cfg.SetDefault("security.enable_auth", false)
 	cfg.SetDefault("security.auth_method", "psk")
-	cfg.SetDefault("security.require_signed_packages", false)
+	cfg.SetDefault("security.require_signed_packages", true)
 
 	// Deployment defaults
 	cfg.SetDefault("deployment.default_strategy", "immediate")
