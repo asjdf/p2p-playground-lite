@@ -35,6 +35,8 @@ go.work.sum
 /bin/
 /examples/**/bin/
 *.tar.gz
+/controller
+/daemon
 
 # Runtime data
 ~/
