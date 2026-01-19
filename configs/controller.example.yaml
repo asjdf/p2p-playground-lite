@@ -45,8 +45,8 @@ security:
   # Pre-shared key (for PSK auth)
   psk: ""
 
-  # Require signed packages (recommended: true for production)
-  require_signed_packages: true
+  # Allow deploying unsigned packages (false = reject unsigned packages, recommended for production)
+  allow_unsigned_packages: false
 
 deployment:
   # Default deployment strategy: immediate, graceful, manual

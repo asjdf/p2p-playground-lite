@@ -53,21 +53,26 @@ This document outlines the architecture and implementation strategy for P2P Play
 - ⏳ Complete end-to-end testing documentation
 - ⏳ Prepare for Phase 2 (Security)
 
-**Phase 2: Security** (70%)
+**Phase 2: Security & Stability** (55%)
 - ✓ Ed25519 key generation and management
 - ✓ Package signing with controller sign command
 - ✓ Signature verification in daemon
-- ✓ Configurable security policies
+- ✓ **Controller configuration file support** (kubectl-style --config flag)
+- ✓ **Default mandatory signature verification** (require_signed_packages: true)
+- ✓ **Health check module** (pkg/health: Process/HTTP/TCP checks)
 - ✓ Multi-key trust support
+- ⏸️ Health check integration with runtime
+- ⏸️ Auto-restart mechanism
 - ⏸️ PSK (Pre-Shared Key) authentication for P2P network
 - ⏸️ TLS 1.3 transport encryption (libp2p built-in, needs configuration)
 
 ### ⏸️ Not Started
 
-**Phase 3A: Health & Resources** (0%)
-- ⏸️ HTTP/TCP/process health checks
+**Phase 3A: Health & Resources** (5%)
+- ✓ Health check base module (pkg/health/)
+- ⏸️ Health check integration with runtime
 - ⏸️ cgroups resource limiting
-- ⏸️ Auto-restart on failure
+- ⏸️ Auto-restart with backoff strategies
 
 **Phase 3B: Version Management** (0%)
 - ⏸️ Semver parsing and comparison
@@ -85,10 +90,12 @@ This document outlines the architecture and implementation strategy for P2P Play
 - Application listing across nodes
 - Log streaming from deployed applications
 - **Ed25519 package signing and verification**
-- **Configurable security policies**
-- **Multi-key trust model**
-- Configuration system
-- Logging infrastructure
+- **Mandatory signature verification by default** (configurable)
+- **Controller configuration file support** (--config flag, default: ~/.p2p-playground/controller.yaml)
+- **Health check module** (Process/HTTP/TCP check types with retry logic)
+- **Multi-key trust model** (multiple trusted public keys support)
+- Configuration system (YAML with viper)
+- Logging infrastructure (structured logging with zap)
 - Complete CLI tooling (deploy, list, logs, nodes, keygen, sign)
 
 **Network Topology (Docker):**
@@ -617,25 +624,41 @@ After implementation, verify with this end-to-end test:
 
 ## Security Design Decisions
 
-### Phase 2.1 Implementation (Current)
+### Phase 2.1 Implementation (Current) - ⚠️ UPDATED
 
-**Decision**: Package signature verification is **optional by default**
+**Decision**: Package signature verification is **mandatory by default** (as of 2026-01-19)
 
 **Implementation**:
-- `security.require_signed_packages` defaults to `false`
+- `security.require_signed_packages` defaults to `true` in all configs
 - When signature is present, it is always verified
 - When signature is absent:
-  - If `require_signed_packages: true` → deployment rejected
+  - If `require_signed_packages: true` (default) → deployment **rejected**
   - If `require_signed_packages: false` → warning logged, deployment allowed
+- Development/testing can set `require_signed_packages: false` in config
 
 **Rationale**:
-1. **Backward Compatibility** - Existing deployments continue to work
-2. **Gradual Adoption** - Users can test signature functionality first
-3. **Flexibility** - Suitable for different environments (dev vs prod)
+1. **Security by Default** - Safe default behavior prevents unsigned code execution
+2. **Clear Security Posture** - Users must explicitly opt-out of security
+3. **Best Practice** - Aligns with industry standards (container signing, code signing)
+
+**Configuration**:
+```yaml
+# Production (default)
+security:
+  require_signed_packages: true  # Reject unsigned packages
+
+# Development/Testing (explicit opt-out)
+security:
+  require_signed_packages: false  # Allow unsigned packages with warning
+```
+
+**Migration**: Existing users upgrading will need to either:
+1. Generate signing keys and sign packages (recommended)
+2. Explicitly set `require_signed_packages: false` in config
 
 **Future Path**:
-- Phase 2.2: Consider changing default to `true` based on user feedback
 - Phase 3: Add fine-grained policies (per-app, per-label, etc.)
+- Phase 3: Key revocation and rotation automation
 
 ### Signature Algorithm
 
@@ -658,6 +681,91 @@ After implementation, verify with this end-to-end test:
 3. Multi-environment - different environments can use different keys
 
 **Security**: Any compromise of a single trusted key requires key revocation (future feature)
+
+### Controller Configuration System
+
+**Implementation**: kubectl-style configuration file support (as of 2026-01-19)
+
+**Features**:
+- Global `--config/-c` flag for all commands
+- Default config location: `~/.p2p-playground/controller.yaml`
+- Automatic fallback to hardcoded defaults if no config found
+- Shared configuration across all controller commands
+
+**Configuration Structure**:
+```yaml
+node:
+  listen_addrs: [...]  # P2P listening addresses
+  enable_mdns: true    # mDNS discovery
+
+logging:
+  level: info          # debug/info/warn/error
+  format: console      # console/json
+
+storage:
+  data_dir: ...        # Base data directory
+  keys_dir: ...        # Signing keys location
+
+security:
+  require_signed_packages: true
+
+deployment:
+  timeout: 5m          # Deployment timeout
+  retry_attempts: 3    # Retry count
+  retry_delay: 10s     # Delay between retries
+```
+
+**Usage**:
+```bash
+# Use default config (~/.p2p-playground/controller.yaml)
+controller deploy app.tar.gz
+
+# Specify config file
+controller --config /path/to/config.yaml deploy app.tar.gz
+controller -c prod-config.yaml nodes
+```
+
+**Design Rationale**:
+- Familiar UX for kubectl/docker users
+- Environment-specific configurations (dev/staging/prod)
+- Reduces command-line flag clutter
+- Enables configuration management via version control
+
+### Health Check Module
+
+**Implementation**: Standalone health check module `pkg/health/` (as of 2026-01-19)
+
+**Check Types**:
+1. **Process Check**: Verifies process is alive using `syscall.Signal(0)`
+2. **HTTP Check**: HTTP endpoint health check (GET request, status code validation)
+3. **TCP Check**: TCP port connectivity check
+
+**Configuration** (from manifest.yaml):
+```yaml
+health_check:
+  type: process           # process|http|tcp
+  interval: 30s           # Check interval
+  timeout: 5s             # Timeout per check
+  retries: 3              # Failures before unhealthy
+  http_port: 8080         # For HTTP checks
+  http_path: /health      # For HTTP checks
+  tcp_port: 9090          # For TCP checks
+```
+
+**Features**:
+- Consecutive failure tracking
+- Configurable retry threshold
+- Timeout support for each check
+- Callback mechanism for unhealthy state
+- Continuous monitoring via `StartMonitoring()`
+
+**Status**: Base module complete, integration with runtime pending
+
+**Next Steps**:
+1. Integrate health checker into `pkg/runtime/`
+2. Start health monitoring after app launch
+3. Trigger auto-restart on persistent failures
+4. Add health status to `controller list` output
 
 ## Security Considerations
 

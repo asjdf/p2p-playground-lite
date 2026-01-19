@@ -69,8 +69,8 @@ security:
   # Trusted peer IDs (whitelist)
   trusted_peers: []
 
-  # Require signed packages (recommended: true for production)
-  require_signed_packages: true
+  # Allow deploying unsigned packages (false = reject unsigned packages, recommended for production)
+  allow_unsigned_packages: false
 
   # Public keys directory for verification
   public_keys_dir: ~/.p2p-playground/keys/trusted

@@ -395,7 +395,7 @@ Expected log:
 warn  package deployed without signature verification
 ```
 
-**Status**: ✓ Verified working - Unsigned packages deploy successfully with warning (require_signed_packages is false by default)
+**Status**: ✓ Verified working - Unsigned packages deploy with warning when require_signed_packages=false (⚠️ default is true, will reject unsigned packages)
 
 #### 6.5. Multi-Key Trust Scenario
 
@@ -415,8 +415,10 @@ docker cp /path/to/team-b.pub p2p-daemon1:/data/keys/trusted/
 **Security Notes**:
 - Private keys (`.key` files) should never be committed to version control
 - Public keys (`.pub` files) can be safely distributed
-- By default, signature verification is optional (`require_signed_packages: false`)
-- For production, set `require_signed_packages: true` in daemon config
+- **⚠️ By default, signature verification is MANDATORY** (`require_signed_packages: true`)
+- Unsigned packages will be **rejected** unless you explicitly set `require_signed_packages: false`
+- `daemon-docker.yaml` sets `require_signed_packages: false` for easier local testing
+- For production, keep the default `require_signed_packages: true`
 - See `docs/SECURITY.md` for detailed security guidelines
 
 ### 7. Multi-Node Deployment Test

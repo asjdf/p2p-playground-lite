@@ -7,7 +7,13 @@
 P2P Playground Lite 实现了以下安全机制：
 
 1. **应用包签名验证** - 使用 Ed25519 数字签名确保应用包来源可信和完整性
-2. **可配置的安全策略** - 管理员可选择是否强制要求签名验证
+2. **默认强制签名策略** - ⚠️ **默认拒绝未签名包**（可配置为允许）
+3. **多密钥信任模型** - 支持多个可信公钥，便于密钥轮换和多团队部署
+
+**⚠️ 重要变更（2026-01-19）**：
+- 从此版本开始，**默认要求所有应用包必须签名**
+- 未签名的包将被拒绝部署
+- 开发/测试环境可通过配置显式关闭此限制
 
 ## 应用包签名
 
@@ -77,6 +83,52 @@ controller deploy myapp-1.0.0.tar.gz
 
 如果存在 `myapp-1.0.0.tar.gz.sig`，签名会自动包含在部署请求中。
 
+## Controller 配置
+
+### 配置文件支持
+
+Controller 支持通过配置文件统一管理设置（类似 kubectl）：
+
+```bash
+# 使用默认配置文件 (~/.p2p-playground/controller.yaml)
+controller deploy app.tar.gz
+
+# 指定配置文件
+controller --config /path/to/config.yaml deploy app.tar.gz
+controller -c prod-config.yaml nodes
+```
+
+### Controller 配置示例
+
+```yaml
+# ~/.p2p-playground/controller.yaml
+node:
+  listen_addrs:
+    - /ip4/0.0.0.0/tcp/9001
+  enable_mdns: true
+
+logging:
+  level: info      # debug|info|warn|error
+  format: console  # console|json
+
+storage:
+  data_dir: ~/.p2p-playground-controller
+  keys_dir: ~/.p2p-playground-controller/keys
+
+security:
+  allow_unsigned_packages: false  # 拒绝未签名包（推荐）
+
+deployment:
+  timeout: 5m
+  retry_attempts: 3
+  retry_delay: 10s
+```
+
+**配置加载顺序**：
+1. 如果指定 `--config` 参数，使用该配置文件
+2. 否则检查默认位置 `~/.p2p-playground/controller.yaml`
+3. 如果默认文件不存在，使用硬编码默认值
+
 ## 节点配置
 
 ### 配置可信公钥
@@ -102,8 +154,8 @@ daemon 会自动加载该目录下所有 `.pub` 文件作为可信公钥。
 ```yaml
 # daemon.yaml
 security:
-  # 是否强制要求应用包签名
-  require_signed_packages: false  # 默认 false（推荐先设为 false 测试）
+  # 是否允许部署未签名的应用包
+  allow_unsigned_packages: false  # ⚠️ 默认 false（拒绝未签名包）
 
   # 可信公钥目录（可选，默认为 keys/trusted）
   public_keys_dir: ~/.p2p-playground/keys/trusted
@@ -111,15 +163,18 @@ security:
 
 **配置选项说明**：
 
-- `require_signed_packages: false` (默认)
-  - 如果有签名，会进行验证
-  - 如果没有签名，会记录 warning 但仍然允许部署
-  - 适合测试和开发环境
-
-- `require_signed_packages: true` (生产环境推荐)
+- `allow_unsigned_packages: false` (**默认值，推荐**)
   - 必须有签名才能部署
   - 签名验证失败会拒绝部署
-  - 适合生产环境
+  - 未签名的包会被拒绝
+  - 适合生产环境和安全敏感场景
+  - **这是默认行为，更安全**
+
+- `allow_unsigned_packages: true` (开发/测试环境)
+  - 如果有签名，会进行验证
+  - 如果没有签名，会记录 warning 但仍然允许部署
+  - 适合本地开发和测试环境
+  - **需要显式配置才能允许未签名包**
 
 ## 签名验证流程
 
@@ -128,8 +183,8 @@ security:
 1. **检查签名是否存在**
    - 如果有签名 → 进入验证流程
    - 如果没有签名：
-     - 如果 `require_signed_packages: true` → 拒绝部署
-     - 如果 `require_signed_packages: false` → 记录 warning，允许部署
+     - 如果 `allow_unsigned_packages: false`（默认） → 拒绝部署
+     - 如果 `allow_unsigned_packages: true` → 记录 warning，允许部署
 
 2. **签名验证**（如果有签名）
    - 计算应用包的 SHA-256 哈希
@@ -177,7 +232,7 @@ security:
 
 1. 生成测试密钥对
 2. 签名应用包（可选）
-3. 配置 `require_signed_packages: false`
+3. 配置 `allow_unsigned_packages: true` （允许未签名包，便于开发）
 4. 观察日志确认签名机制工作正常
 
 ### 生产环境
@@ -185,7 +240,7 @@ security:
 1. 生成正式密钥对，妥善保管私钥
 2. 将公钥分发到所有生产节点
 3. 所有应用包必须签名
-4. 配置 `require_signed_packages: true`
+4. 保持 `allow_unsigned_packages: false`（默认，拒绝未签名包）
 5. 定期轮换密钥对
 
 ### 密钥管理
@@ -210,16 +265,22 @@ daemon 支持同时信任多个公钥，这在以下场景很有用：
 
 ### Phase 2.1 实现决策
 
-**决策**：初始实现中，签名验证默认不强制（`require_signed_packages: false`）
+**决策** (⚠️ 已更新)：签名验证默认强制（`allow_unsigned_packages: false`）
 
 **理由**：
-1. 向后兼容性 - 不影响已有的部署流程
-2. 渐进式采用 - 用户可以先测试签名功能
-3. 灵活性 - 适合不同的使用场景
+1. **安全优先** - 默认拒绝未签名包，防止未授权代码执行
+2. **清晰的安全姿态** - 用户必须显式选择允许未签名包
+3. **符合行业最佳实践** - 与容器签名、代码签名标准一致
+4. **更好的配置名称** - `allow_unsigned_packages` 语义更清晰（false = 更安全）
+
+**配置迁移**：
+- 旧版本使用 `require_signed_packages: true/false`
+- 新版本使用 `allow_unsigned_packages: true/false`
+- 逻辑反转：`require_signed: true` = `allow_unsigned: false`
 
 **未来计划**：
-- Phase 2.2：可能将默认值改为 `true`（需要评估用户反馈）
-- Phase 3：考虑添加更细粒度的策略（按应用、按节点标签等）
+- Phase 3：添加更细粒度的策略（按应用、按节点标签等）
+- Phase 3：密钥撤销和轮换自动化
 
 ### 签名算法选择
 

@@ -259,13 +259,13 @@ func (d *Daemon) handleDeployRequest(stream types.Stream) {
 			return
 		}
 		d.logger.Info("package signature verified successfully")
-	} else if d.config.Security.RequireSignedPackages {
-		// No signature provided but signing is required
-		d.logger.Error("package signature required but not provided")
-		d.sendDeployResponse(stream, false, "", "package signature is required but not provided")
+	} else if !d.config.Security.AllowUnsignedPackages {
+		// No signature provided and unsigned packages not allowed
+		d.logger.Error("unsigned package rejected", "allow_unsigned_packages", d.config.Security.AllowUnsignedPackages)
+		d.sendDeployResponse(stream, false, "", "package signature required: unsigned packages are not allowed (set allow_unsigned_packages: true to permit)")
 		return
 	} else {
-		d.logger.Warn("package deployed without signature verification")
+		d.logger.Warn("package deployed without signature verification", "allow_unsigned_packages", true)
 	}
 
 	// Deploy package

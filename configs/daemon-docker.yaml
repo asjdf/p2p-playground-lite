@@ -36,5 +36,5 @@ security:
   auth_method: psk
   psk: ""
   trusted_peers: []
-  # Set to false for local testing without signatures
-  require_signed_packages: false
+  # Set to true for local testing without signatures (allows unsigned packages)
+  allow_unsigned_packages: true

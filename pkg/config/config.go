@@ -192,8 +192,8 @@ type SecurityConfig struct {
 	// TrustedPeers are the trusted peer IDs
 	TrustedPeers []string `yaml:"trusted_peers" mapstructure:"trusted_peers"`
 
-	// RequireSignedPackages requires packages to be signed
-	RequireSignedPackages bool `yaml:"require_signed_packages" mapstructure:"require_signed_packages"`
+	// AllowUnsignedPackages allows deploying packages without signatures
+	AllowUnsignedPackages bool `yaml:"allow_unsigned_packages" mapstructure:"allow_unsigned_packages"`
 
 	// PublicKeysDir is where public keys for verification are stored
 	PublicKeysDir string `yaml:"public_keys_dir" mapstructure:"public_keys_dir"`
@@ -308,7 +308,7 @@ func setDaemonDefaults(cfg *Config) {
 	// Security defaults
 	cfg.SetDefault("security.enable_auth", false)
 	cfg.SetDefault("security.auth_method", "psk")
-	cfg.SetDefault("security.require_signed_packages", true)
+	cfg.SetDefault("security.allow_unsigned_packages", false)
 }
 
 // setControllerDefaults sets default values for controller configuration
@@ -331,7 +331,7 @@ func setControllerDefaults(cfg *Config) {
 	// Security defaults
 	cfg.SetDefault("security.enable_auth", false)
 	cfg.SetDefault("security.auth_method", "psk")
-	cfg.SetDefault("security.require_signed_packages", true)
+	cfg.SetDefault("security.allow_unsigned_packages", false)
 
 	// Deployment defaults
 	cfg.SetDefault("deployment.default_strategy", "immediate")
