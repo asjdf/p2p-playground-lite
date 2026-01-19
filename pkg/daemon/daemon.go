@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/asjdf/p2p-playground-lite/pkg/config"
+	"github.com/asjdf/p2p-playground-lite/pkg/consts"
 	"github.com/asjdf/p2p-playground-lite/pkg/logging"
 	"github.com/asjdf/p2p-playground-lite/pkg/p2p"
 	pkgmanager "github.com/asjdf/p2p-playground-lite/pkg/package"
@@ -17,12 +18,6 @@ import (
 	"github.com/asjdf/p2p-playground-lite/pkg/storage"
 	"github.com/asjdf/p2p-playground-lite/pkg/transfer"
 	"github.com/asjdf/p2p-playground-lite/pkg/types"
-)
-
-const (
-	deployProtocolID = "/p2p-playground/deploy/1.0.0"
-	listProtocolID   = "/p2p-playground/list/1.0.0"
-	logsProtocolID   = "/p2p-playground/logs/1.0.0"
 )
 
 // Daemon coordinates all daemon components
@@ -103,9 +98,9 @@ func (d *Daemon) Start() error {
 	d.transfer = transfer.New(d.host, d.logger)
 
 	// Register protocol handlers
-	d.host.SetStreamHandler(deployProtocolID, d.handleDeployRequest)
-	d.host.SetStreamHandler(listProtocolID, d.handleListRequest)
-	d.host.SetStreamHandler(logsProtocolID, d.handleLogsRequest)
+	d.host.SetStreamHandler(consts.DeployProtocolID, d.handleDeployRequest)
+	d.host.SetStreamHandler(consts.ListProtocolID, d.handleListRequest)
+	d.host.SetStreamHandler(consts.LogsProtocolID, d.handleLogsRequest)
 
 	d.logger.Info("daemon started",
 		"peer_id", host.ID(),

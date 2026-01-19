@@ -11,16 +11,11 @@ import (
 	"time"
 
 	"github.com/asjdf/p2p-playground-lite/pkg/config"
+	"github.com/asjdf/p2p-playground-lite/pkg/consts"
 	"github.com/asjdf/p2p-playground-lite/pkg/logging"
 	"github.com/asjdf/p2p-playground-lite/pkg/p2p"
 	"github.com/asjdf/p2p-playground-lite/pkg/types"
 	"github.com/spf13/cobra"
-)
-
-const (
-	deployProtocolID = "/p2p-playground/deploy/1.0.0"
-	listProtocolID   = "/p2p-playground/list/1.0.0"
-	logsProtocolID   = "/p2p-playground/logs/1.0.0"
 )
 
 var (
@@ -382,7 +377,7 @@ func deployPackage(ctx context.Context, host *p2p.Host, peerID string, packagePa
 	defer file.Close()
 
 	// Create stream to target peer
-	stream, err := host.NewStream(ctx, peerID, deployProtocolID)
+	stream, err := host.NewStream(ctx, peerID, consts.DeployProtocolID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create stream: %w", err)
 	}
@@ -477,7 +472,7 @@ type ListAppsResponse struct {
 // listApplications lists applications on a target node
 func listApplications(ctx context.Context, host *p2p.Host, peerID string, logger types.Logger) ([]*types.Application, error) {
 	// Create stream to target peer
-	stream, err := host.NewStream(ctx, peerID, listProtocolID)
+	stream, err := host.NewStream(ctx, peerID, consts.ListProtocolID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
@@ -527,7 +522,7 @@ type LogsResponse struct {
 // fetchLogs fetches logs from an application on a target node
 func fetchLogs(ctx context.Context, host *p2p.Host, peerID string, appID string, follow bool, tail int, logger types.Logger) (string, error) {
 	// Create stream to target peer
-	stream, err := host.NewStream(ctx, peerID, logsProtocolID)
+	stream, err := host.NewStream(ctx, peerID, consts.LogsProtocolID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create stream: %w", err)
 	}
