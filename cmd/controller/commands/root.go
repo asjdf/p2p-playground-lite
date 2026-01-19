@@ -24,6 +24,30 @@ var (
 	globalLogger  types.Logger
 )
 
+// createP2PHost creates a P2P host using global configuration
+func createP2PHost(ctx context.Context) (*p2p.Host, error) {
+	hostConfig := &p2p.HostConfig{
+		ListenAddrs:  globalConfig.Node.ListenAddrs,
+		PSK:          globalConfig.Security.PSK,
+		EnableAuth:   globalConfig.Security.EnableAuth,
+		TrustedPeers: []string{}, // Controller doesn't restrict trusted peers
+	}
+
+	host, err := p2p.NewHost(ctx, hostConfig, globalLogger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create P2P host: %w", err)
+	}
+
+	// Enable mDNS discovery if configured
+	if globalConfig.Node.EnableMDNS {
+		if err := host.EnableMDNS(ctx); err != nil {
+			globalLogger.Warn("failed to enable mDNS", "error", err)
+		}
+	}
+
+	return host, nil
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "controller",
 	Short: "P2P Playground controller",
@@ -72,25 +96,15 @@ If --node is not specified, the package will be deployed to the first discovered
 			return fmt.Errorf("failed to access package file: %w", err)
 		}
 
-		// Use global logger
-		logger := globalLogger
-
 		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
+		host, err := createP2PHost(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to create P2P host: %w", err)
+			return err
 		}
 		defer host.Close()
 
 		fmt.Printf("Controller ID: %s\n", host.ID())
-
-		// Enable mDNS discovery if configured
-		if globalConfig.Node.EnableMDNS {
-			if err := host.EnableMDNS(ctx); err != nil {
-				return fmt.Errorf("failed to enable mDNS: %w", err)
-			}
-		}
 
 		// Wait for peer discovery
 		fmt.Println("Discovering nodes...")
@@ -113,7 +127,7 @@ If --node is not specified, the package will be deployed to the first discovered
 
 		// Deploy package
 		fmt.Println("\nDeploying package...")
-		appID, err := deployPackage(ctx, host, targetPeerID, packagePath, fileInfo.Size(), deployAutoStart, logger)
+		appID, err := deployPackage(ctx, host, targetPeerID, packagePath, fileInfo.Size(), deployAutoStart, globalLogger)
 		if err != nil {
 			return fmt.Errorf("deployment failed: %w", err)
 		}
@@ -139,23 +153,13 @@ If --node is not specified, applications from the first discovered node will be 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Listing applications...")
 
-		// Use global logger
-		logger := globalLogger
-
 		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
+		host, err := createP2PHost(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to create P2P host: %w", err)
+			return err
 		}
 		defer host.Close()
-
-		// Enable mDNS discovery if configured
-		if globalConfig.Node.EnableMDNS {
-			if err := host.EnableMDNS(ctx); err != nil {
-				return fmt.Errorf("failed to enable mDNS: %w", err)
-			}
-		}
 
 		// Wait for peer discovery
 		fmt.Println("Discovering nodes...")
@@ -178,7 +182,7 @@ If --node is not specified, applications from the first discovered node will be 
 
 		// List applications
 		fmt.Println("\nFetching applications...")
-		apps, err := listApplications(ctx, host, targetPeerID, logger)
+		apps, err := listApplications(ctx, host, targetPeerID, globalLogger)
 		if err != nil {
 			return fmt.Errorf("failed to list applications: %w", err)
 		}
@@ -223,23 +227,13 @@ Use --tail to limit the number of lines shown.`,
 		appID := args[0]
 		fmt.Printf("Fetching logs for application: %s\n", appID)
 
-		// Use global logger
-		logger := globalLogger
-
 		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
+		host, err := createP2PHost(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to create P2P host: %w", err)
+			return err
 		}
 		defer host.Close()
-
-		// Enable mDNS discovery if configured
-		if globalConfig.Node.EnableMDNS {
-			if err := host.EnableMDNS(ctx); err != nil {
-				return fmt.Errorf("failed to enable mDNS: %w", err)
-			}
-		}
 
 		// Wait for peer discovery
 		fmt.Println("Discovering nodes...")
@@ -262,7 +256,7 @@ Use --tail to limit the number of lines shown.`,
 
 		// Fetch logs
 		fmt.Println("\nFetching logs...\n")
-		logs, err := fetchLogs(ctx, host, targetPeerID, appID, logsFollow, logsTail, logger)
+		logs, err := fetchLogs(ctx, host, targetPeerID, appID, logsFollow, logsTail, globalLogger)
 		if err != nil {
 			return fmt.Errorf("failed to fetch logs: %w", err)
 		}
@@ -280,14 +274,11 @@ var nodesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Discovering P2P nodes...")
 
-		// Use global logger
-		logger := globalLogger
-
 		// Create P2P host using configuration
 		ctx := context.Background()
-		host, err := p2p.NewHost(ctx, globalConfig.Node.ListenAddrs, logger)
+		host, err := createP2PHost(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to create P2P host: %w", err)
+			return err
 		}
 		defer host.Close()
 
@@ -297,13 +288,6 @@ var nodesCmd = &cobra.Command{
 			fmt.Printf("  - %s\n", addr)
 		}
 		fmt.Println()
-
-		// Enable mDNS discovery if configured
-		if globalConfig.Node.EnableMDNS {
-			if err := host.EnableMDNS(ctx); err != nil {
-				return fmt.Errorf("failed to enable mDNS: %w", err)
-			}
-		}
 
 		fmt.Println("Scanning for nodes via mDNS (waiting 5 seconds)...")
 		time.Sleep(5 * time.Second)

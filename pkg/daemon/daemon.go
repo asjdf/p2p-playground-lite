@@ -76,7 +76,13 @@ func (d *Daemon) Start() error {
 	d.logger.Info("keys loaded")
 
 	// Initialize P2P host
-	host, err := p2p.NewHost(d.ctx, d.config.Node.ListenAddrs, d.logger)
+	hostConfig := &p2p.HostConfig{
+		ListenAddrs:  d.config.Node.ListenAddrs,
+		PSK:          d.config.Security.PSK,
+		EnableAuth:   d.config.Security.EnableAuth,
+		TrustedPeers: d.config.Security.TrustedPeers,
+	}
+	host, err := p2p.NewHost(d.ctx, hostConfig, d.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create P2P host: %w", err)
 	}
