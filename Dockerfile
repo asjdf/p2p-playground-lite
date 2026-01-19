@@ -35,8 +35,13 @@ COPY configs/daemon.example.yaml /etc/p2p-playground/daemon.yaml
 COPY configs/controller.example.yaml /etc/p2p-playground/controller.yaml
 
 # Create data directories
-RUN mkdir -p /data/packages /data/apps /data/keys && \
-    chown -R p2puser:p2pgroup /data
+RUN mkdir -p /data/packages /data/apps /data/keys /data/keys/trusted
+
+# Copy trusted public keys for signature verification
+COPY --chown=p2puser:p2pgroup configs/keys/trusted/*.pub /data/keys/trusted/
+
+# Ensure directories exist and set ownership
+RUN mkdir -p /data/keys/trusted && chown -R p2puser:p2pgroup /data
 
 # Switch to non-root user
 USER p2puser

@@ -289,11 +289,141 @@ Started at: 2026-01-19T08:40:00Z
 
 **Status**: ✓ Verified working - Successfully fetches and displays application logs
 
-### 6. Multi-Node Deployment Test
+### 6. Package Signature Verification Test ✓ VERIFIED
+
+#### 6.1. Generate Signing Keys
+
+```bash
+# Generate Ed25519 key pair for package signing
+./bin/controller keygen -o /tmp/test-controller-keys
+```
+
+Expected output:
+```
+✓ Key pair generated successfully!
+  Private key: /tmp/test-controller-keys/controller.key
+  Public key:  /tmp/test-controller-keys/controller.pub
+
+⚠️  Keep the private key secure and never share it.
+📤 Distribute the public key to nodes for signature verification.
+
+Public key (hex): <hex-encoded-public-key>
+```
+
+#### 6.2. Sign Application Package
+
+```bash
+# Sign the packaged application
+./bin/controller sign examples/hello-world/hello-world-1.0.0.tar.gz \
+  --key /tmp/test-controller-keys/controller.key
+```
+
+Expected output:
+```
+✓ Package signed successfully!
+  Signature: examples/hello-world/hello-world-1.0.0.tar.gz.sig
+```
+
+#### 6.3. Deploy Signed Package to Daemon
+
+```bash
+# Set up trusted keys directory for testing
+mkdir -p configs/keys/trusted
+cp /tmp/test-controller-keys/controller.pub configs/keys/trusted/
+
+# Copy trusted key to daemon container
+docker exec p2p-daemon2 mkdir -p /data/keys/trusted
+docker cp configs/keys/trusted/controller.pub p2p-daemon2:/data/keys/trusted/
+
+# Copy signed package and signature to controller
+docker cp examples/hello-world/hello-world-1.0.0.tar.gz p2p-controller:/data/
+docker cp examples/hello-world/hello-world-1.0.0.tar.gz.sig p2p-controller:/data/
+
+# Deploy with signature verification
+docker exec p2p-controller controller deploy /data/hello-world-1.0.0.tar.gz
+```
+
+Expected output:
+```
+Deploying package: /data/hello-world-1.0.0.tar.gz
+...
+✓ Deployment successful!
+  Application ID: hello-world-1.0.0
+  Status: Started
+```
+
+Verify signature verification in daemon logs:
+```bash
+docker logs p2p-daemon2 | grep -E "(signature|Signature|verify)"
+```
+
+Expected log entries:
+```
+info  verifying package signature
+info  signature verified  {"public_key": "controller.pub"}
+info  package signature verified successfully
+```
+
+**Status**: ✓ Verified working - Signature verification works with Ed25519 keys
+
+#### 6.4. Deploy Unsigned Package (Optional Verification)
+
+```bash
+# Remove signature file
+docker exec p2p-controller rm /data/hello-world-1.0.0.tar.gz.sig
+
+# Deploy without signature
+docker exec p2p-controller controller deploy /data/hello-world-1.0.0.tar.gz
+```
+
+Expected output (deployment succeeds with warning):
+```
+Deploying package: /data/hello-world-1.0.0.tar.gz
+...
+warn  no package signature found, deploying without signature verification
+...
+✓ Deployment successful!
+```
+
+Verify warning in daemon logs:
+```bash
+docker logs p2p-daemon3 | grep signature
+```
+
+Expected log:
+```
+warn  package deployed without signature verification
+```
+
+**Status**: ✓ Verified working - Unsigned packages deploy successfully with warning (require_signed_packages is false by default)
+
+#### 6.5. Multi-Key Trust Scenario
+
+The daemon supports multiple trusted public keys in the `/data/keys/trusted/` directory. This allows:
+- Key rotation without disrupting deployments
+- Multiple teams/developers signing packages
+- Gradual key migration
+
+```bash
+# Add multiple trusted keys
+docker cp /path/to/team-a.pub p2p-daemon1:/data/keys/trusted/
+docker cp /path/to/team-b.pub p2p-daemon1:/data/keys/trusted/
+
+# Daemon will accept packages signed by either key
+```
+
+**Security Notes**:
+- Private keys (`.key` files) should never be committed to version control
+- Public keys (`.pub` files) can be safely distributed
+- By default, signature verification is optional (`require_signed_packages: false`)
+- For production, set `require_signed_packages: true` in daemon config
+- See `docs/SECURITY.md` for detailed security guidelines
+
+### 7. Multi-Node Deployment Test
 
 Deploy the same application to all 3 daemons and verify they all run correctly.
 
-### 7. Network Partition Test
+### 8. Network Partition Test
 
 ```bash
 # Disconnect daemon3 from network
@@ -306,7 +436,7 @@ docker-compose logs daemon1 daemon2
 docker network connect p2p-playground_p2p-network p2p-daemon3
 ```
 
-### 8. Node Failure Test
+### 9. Node Failure Test
 
 ```bash
 # Stop daemon2
@@ -361,6 +491,24 @@ docker-compose build daemon1
 docker-compose up -d daemon1
 ```
 
+### Trusted Keys Not Present in Daemon Container
+
+If signature verification fails with "trusted public keys directory not found":
+
+```bash
+# Check if trusted keys directory exists in container
+docker exec p2p-daemon1 ls -la /data/keys/trusted/
+
+# If directory missing, manually create and copy keys
+docker exec p2p-daemon1 mkdir -p /data/keys/trusted
+docker cp configs/keys/trusted/*.pub p2p-daemon1:/data/keys/trusted/
+
+# Restart daemon to pick up new keys
+docker-compose restart daemon1
+```
+
+**Note**: The Dockerfile's `COPY configs/keys/trusted/*.pub` command only works if `.pub` files exist at build time. For testing, you may need to manually copy keys to running containers as shown above.
+
 ## Development Workflow
 
 1. Make code changes
@@ -378,9 +526,9 @@ docker-compose up -d daemon1
 - [x] Implement logs viewing command (✓ `controller logs` working)
 - [x] End-to-end deployment tested and verified
 
-### Phase 2 - Security (Next Priority)
+### Phase 2 - Security ✓ PARTIALLY COMPLETED
 - [ ] Add PSK authentication
-- [ ] Add package signature verification
+- [x] Add package signature verification (✓ Ed25519 signing and verification working)
 - [ ] Add TLS 1.3 transport encryption
 
 ### Phase 3 - Advanced Features (Planned)

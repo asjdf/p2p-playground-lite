@@ -53,12 +53,16 @@ This document outlines the architecture and implementation strategy for P2P Play
 - ⏳ Complete end-to-end testing documentation
 - ⏳ Prepare for Phase 2 (Security)
 
-### ⏸️ Not Started
+**Phase 2: Security** (70%)
+- ✓ Ed25519 key generation and management
+- ✓ Package signing with controller sign command
+- ✓ Signature verification in daemon
+- ✓ Configurable security policies
+- ✓ Multi-key trust support
+- ⏸️ PSK (Pre-Shared Key) authentication for P2P network
+- ⏸️ TLS 1.3 transport encryption (libp2p built-in, needs configuration)
 
-**Phase 2: Security** (0%)
-- ⏸️ Ed25519 signing/verification
-- ⏸️ PSK authentication
-- ⏸️ Signature verification in deployment
+### ⏸️ Not Started
 
 **Phase 3A: Health & Resources** (0%)
 - ⏸️ HTTP/TCP/process health checks
@@ -80,9 +84,12 @@ This document outlines the architecture and implementation strategy for P2P Play
 - Application deployment via P2P (with progress tracking)
 - Application listing across nodes
 - Log streaming from deployed applications
+- **Ed25519 package signing and verification**
+- **Configurable security policies**
+- **Multi-key trust model**
 - Configuration system
 - Logging infrastructure
-- Complete CLI tooling (deploy, list, logs, nodes)
+- Complete CLI tooling (deploy, list, logs, nodes, keygen, sign)
 
 **Network Topology (Docker):**
 ```
@@ -608,15 +615,61 @@ After implementation, verify with this end-to-end test:
 - Log rotation: 10MB per file, keep 5 files
 - Package cleanup: Keep last 3 versions per app
 
+## Security Design Decisions
+
+### Phase 2.1 Implementation (Current)
+
+**Decision**: Package signature verification is **optional by default**
+
+**Implementation**:
+- `security.require_signed_packages` defaults to `false`
+- When signature is present, it is always verified
+- When signature is absent:
+  - If `require_signed_packages: true` → deployment rejected
+  - If `require_signed_packages: false` → warning logged, deployment allowed
+
+**Rationale**:
+1. **Backward Compatibility** - Existing deployments continue to work
+2. **Gradual Adoption** - Users can test signature functionality first
+3. **Flexibility** - Suitable for different environments (dev vs prod)
+
+**Future Path**:
+- Phase 2.2: Consider changing default to `true` based on user feedback
+- Phase 3: Add fine-grained policies (per-app, per-label, etc.)
+
+### Signature Algorithm
+
+**Choice**: Ed25519
+
+**Rationale**:
+- High performance (fast signing and verification)
+- Small key sizes (32B public, 64B private)
+- Strong security (128-bit security level)
+- Native Go standard library support
+- Modern cryptographic standard
+
+### Multi-Key Trust Model
+
+**Implementation**: daemon accepts packages signed by any trusted public key
+
+**Use Cases**:
+1. Key rotation - trust both old and new keys during transition
+2. Multi-team deployments - each team has their own signing key
+3. Multi-environment - different environments can use different keys
+
+**Security**: Any compromise of a single trusted key requires key revocation (future feature)
+
 ## Security Considerations
 
 ### Authentication
-- PSK (Pre-Shared Key) for simple deployments
+- PSK (Pre-Shared Key) for simple deployments (not yet implemented)
 - Node whitelist (peer IDs in config)
 
 ### Code Signing
 - Ed25519 signatures (fast, secure)
-- Public key distribution out of scope (manual for lite edition)
+- Package signing via `controller sign` command
+- Signature verification with configurable enforcement
+- Public key distribution (manual - copy `.pub` files to daemon nodes)
 
 ### Transport Security
 - libp2p TLS 1.3 by default

@@ -39,3 +39,8 @@ go.work.sum
 # Runtime data
 ~/
 .p2p-playground/
+
+# Keys (但保留目录结构)
+*.key
+# 允许提交公钥用于测试
+# *.pub
