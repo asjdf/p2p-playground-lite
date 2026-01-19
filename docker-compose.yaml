@@ -1,0 +1,88 @@
+services:
+  # Controller node
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: p2p-controller
+    hostname: controller
+    networks:
+      - p2p-network
+    ports:
+      - "9011:9001"
+    volumes:
+      - controller-data:/data
+      - ./examples:/examples:ro
+    environment:
+      - P2P_NODE_ID=controller
+    command: ["sh", "-c", "sleep infinity"]  # Keep running for manual testing
+
+  # Daemon node 1
+  daemon1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: p2p-daemon1
+    hostname: daemon1
+    networks:
+      - p2p-network
+    ports:
+      - "9010:9000"
+    volumes:
+      - daemon1-data:/data
+      - ./configs/daemon-docker.yaml:/etc/p2p-playground/daemon.yaml:ro
+    environment:
+      - P2P_NODE_ID=daemon1
+      - P2P_NODE_LABELS=env=test,region=zone1
+    command: ["daemon", "start", "-c", "/etc/p2p-playground/daemon.yaml"]
+
+  # Daemon node 2
+  daemon2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: p2p-daemon2
+    hostname: daemon2
+    networks:
+      - p2p-network
+    ports:
+      - "9012:9000"
+    volumes:
+      - daemon2-data:/data
+      - ./configs/daemon-docker.yaml:/etc/p2p-playground/daemon.yaml:ro
+    environment:
+      - P2P_NODE_ID=daemon2
+      - P2P_NODE_LABELS=env=test,region=zone2
+    command: ["daemon", "start", "-c", "/etc/p2p-playground/daemon.yaml"]
+
+  # Daemon node 3
+  daemon3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: p2p-daemon3
+    hostname: daemon3
+    networks:
+      - p2p-network
+    ports:
+      - "9013:9000"
+    volumes:
+      - daemon3-data:/data
+      - ./configs/daemon-docker.yaml:/etc/p2p-playground/daemon.yaml:ro
+    environment:
+      - P2P_NODE_ID=daemon3
+      - P2P_NODE_LABELS=env=test,region=zone3
+    command: ["daemon", "start", "-c", "/etc/p2p-playground/daemon.yaml"]
+
+networks:
+  p2p-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  controller-data:
+  daemon1-data:
+  daemon2-data:
+  daemon3-data:

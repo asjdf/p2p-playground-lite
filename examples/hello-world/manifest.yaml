@@ -1,0 +1,21 @@
+name: hello-world
+version: "1.0.0"
+description: Simple hello world application for testing P2P Playground
+entrypoint: bin/hello-world
+
+env:
+  APP_VERSION: "1.0.0"
+
+resources:
+  cpu_percent: 10
+  memory_mb: 50
+
+health_check:
+  type: process
+  interval: 30s
+  timeout: 5s
+  retries: 3
+
+labels:
+  app: hello-world
+  env: demo

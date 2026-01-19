@@ -1,0 +1,76 @@
+# P2P Playground Daemon Configuration
+
+node:
+  # P2P listening addresses
+  listen_addrs:
+    - /ip4/0.0.0.0/tcp/9000
+    - /ip4/0.0.0.0/udp/9000/quic
+
+  # Enable mDNS for local network discovery
+  enable_mdns: true
+
+  # Node labels for grouping
+  labels:
+    env: development
+    region: local
+
+storage:
+  # Base directory for all data
+  data_dir: ~/.p2p-playground
+
+  # Package storage directory
+  packages_dir: ~/.p2p-playground/packages
+
+  # Application deployment directory
+  apps_dir: ~/.p2p-playground/apps
+
+  # Cryptographic keys directory
+  keys_dir: ~/.p2p-playground/keys
+
+runtime:
+  # Maximum concurrent applications
+  max_apps: 10
+
+  # Log retention in days
+  log_retention_days: 7
+
+  # Maximum log file size in MB
+  log_max_size_mb: 10
+
+  # Maximum number of log files to keep
+  log_max_files: 5
+
+  # Enable resource limits (cgroups on Linux)
+  enable_resource_limits: true
+
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+
+  # Log format: json, console
+  format: console
+
+  # Output path (stdout or file path)
+  output_path: stdout
+
+  # Error output path (stderr or file path)
+  error_output_path: stderr
+
+security:
+  # Enable authentication
+  enable_auth: false
+
+  # Authentication method: psk, cert
+  auth_method: psk
+
+  # Pre-shared key (for PSK auth)
+  psk: ""
+
+  # Trusted peer IDs (whitelist)
+  trusted_peers: []
+
+  # Require signed packages
+  require_signed_packages: false
+
+  # Public keys directory for verification
+  public_keys_dir: ~/.p2p-playground/keys/trusted

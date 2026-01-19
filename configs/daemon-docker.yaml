@@ -1,0 +1,39 @@
+# P2P Playground Daemon Configuration for Docker
+
+node:
+  # Listen on all interfaces in Docker
+  listen_addrs:
+    - /ip4/0.0.0.0/tcp/9000
+
+  # Enable mDNS for local network discovery
+  enable_mdns: true
+
+  # Labels will be set via environment variables
+  labels: {}
+
+storage:
+  # Use Docker volume
+  data_dir: /data
+  packages_dir: /data/packages
+  apps_dir: /data/apps
+  keys_dir: /data/keys
+
+runtime:
+  max_apps: 10
+  log_retention_days: 7
+  log_max_size_mb: 10
+  log_max_files: 5
+  enable_resource_limits: false  # Disabled in Docker
+
+logging:
+  level: info
+  format: console
+  output_path: stdout
+  error_output_path: stderr
+
+security:
+  enable_auth: false
+  auth_method: psk
+  psk: ""
+  trusted_peers: []
+  require_signed_packages: false
