@@ -53,7 +53,7 @@ This document outlines the architecture and implementation strategy for P2P Play
 - ⏳ Complete end-to-end testing documentation
 - ⏳ Prepare for Phase 2 (Security)
 
-**Phase 2: Security & Stability** (70%)
+**Phase 2: Security & Stability** (85%)
 - ✓ Ed25519 key generation and management
 - ✓ Package signing with controller sign command
 - ✓ Signature verification in daemon
@@ -63,8 +63,9 @@ This document outlines the architecture and implementation strategy for P2P Play
 - ✓ Multi-key trust support
 - ✓ **Health check integration with runtime** (monitoring from manifest config)
 - ✓ **Auto-restart mechanism** (StartWithAutoRestart() method)
-- ⏸️ PSK (Pre-Shared Key) authentication for P2P network
-- ⏸️ TLS 1.3 transport encryption (libp2p built-in, needs configuration)
+- ✓ **PSK (Pre-Shared Key) authentication** (private P2P network)
+- ✓ **TLS 1.3 transport encryption** (libp2p native support)
+- ✓ **Connection gating** (trusted peers whitelist)
 - ⏸️ Resource limiting (cgroups on Linux)
 
 ### ⏸️ Not Started
@@ -827,22 +828,85 @@ EOF
 ## Security Considerations
 
 ### Authentication
-- PSK (Pre-Shared Key) for simple deployments (not yet implemented)
-- Node whitelist (peer IDs in config)
+
+**PSK (Pre-Shared Key) Authentication** ✅ Implemented (2026-01-19)
+
+P2P Playground支持PSK认证以创建私有P2P网络：
+
+```yaml
+security:
+  enable_auth: true
+  psk: "hex-encoded-32-bytes-key"
+  trusted_peers:
+    - "peer-id-1"
+    - "peer-id-2"
+```
+
+**生成PSK**:
+```bash
+# 生成新的PSK（32字节，256位）
+controller psk
+
+# 指定输出路径
+controller psk --output /path/to/psk
+```
+
+**工作原理**:
+- PSK是32字节（256位）随机密钥
+- 使用hex编码存储（64个十六进制字符）
+- 所有节点（controller和daemon）必须使用相同的PSK
+- 没有PSK或PSK不匹配的节点无法加入网络
+- 使用libp2p的PrivateNetwork功能实现
+
+**连接门控（Connection Gating）**:
+- 基于peer ID的访问控制
+- 支持可信节点白名单（`trusted_peers`）
+- 拦截入站和出站连接
+- 详细日志记录被拒绝的连接
+- 如果trusted_peers为空，则允许所有连接
+
+**使用场景**:
+- 开发环境：无PSK，快速迭代
+- 测试环境：PSK + 无trusted_peers，团队共享
+- 生产环境：PSK + trusted_peers白名单，最高安全级别
 
 ### Code Signing
 - Ed25519 signatures (fast, secure)
 - Package signing via `controller sign` command
 - Signature verification with configurable enforcement
 - Public key distribution (manual - copy `.pub` files to daemon nodes)
+- Multi-key trust support (multiple public keys in trusted directory)
+- Default: reject unsigned packages (allow_unsigned_packages: false)
 
 ### Transport Security
-- libp2p TLS 1.3 by default
-- No custom crypto implementations
+
+**TLS 1.3 + Noise** ✅ Implemented (2026-01-19)
+
+libp2p提供多层安全传输：
+
+```go
+// 配置TLS 1.3和Noise作为安全传输
+libp2p.Security(libp2ptls.ID, libp2ptls.New),  // TLS 1.3 (primary)
+libp2p.Security(noise.ID, noise.New),          // Noise (fallback)
+```
+
+**特性**:
+- TLS 1.3作为主要安全传输协议
+- Noise protocol作为备选（更轻量）
+- libp2p原生支持，自动协商
+- 无需手动配置证书（使用peer identity）
+- 支持前向保密（Forward Secrecy）
+- 所有P2P连接默认加密
+
+**与PSK的关系**:
+- PSK用于网络级访问控制（谁能加入）
+- TLS/Noise用于传输级加密（数据保密性）
+- 两者可以同时启用，提供双重保护
 
 ### File Integrity
 - SHA-256 checksums for all transfers
 - Verify before unpacking
+- Signature verification for package authenticity
 
 ## Future Considerations (Out of Scope for Lite)
 
