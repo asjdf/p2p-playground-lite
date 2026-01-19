@@ -6,9 +6,11 @@
 
 P2P Playground Lite 实现了以下安全机制：
 
-1. **应用包签名验证** - 使用 Ed25519 数字签名确保应用包来源可信和完整性
-2. **默认强制签名策略** - ⚠️ **默认拒绝未签名包**（可配置为允许）
-3. **多密钥信任模型** - 支持多个可信公钥，便于密钥轮换和多团队部署
+1. **PSK 网络认证** - ✅ 使用预共享密钥创建私有 P2P 网络，只有持有相同 PSK 的节点才能加入
+2. **TLS 1.3 传输加密** - ✅ 所有 P2P 连接使用 TLS 1.3 或 Noise 协议加密，确保数据传输安全
+3. **应用包签名验证** - 使用 Ed25519 数字签名确保应用包来源可信和完整性
+4. **默认强制签名策略** - ⚠️ **默认拒绝未签名包**（可配置为允许）
+5. **多密钥信任模型** - 支持多个可信公钥，便于密钥轮换和多团队部署
 
 **⚠️ 重要变更（2026-01-19）**：
 - 从此版本开始，**默认要求所有应用包必须签名**
@@ -83,6 +85,257 @@ controller deploy myapp-1.0.0.tar.gz
 
 如果存在 `myapp-1.0.0.tar.gz.sig`，签名会自动包含在部署请求中。
 
+## PSK 网络认证
+
+### 概述
+
+PSK (Pre-Shared Key) 是一种网络级别的认证机制，用于创建私有 P2P 网络。只有持有相同 PSK 的节点才能相互连接和通信。
+
+**使用场景**：
+- **开发环境** - 隔离开发网络，避免与测试/生产环境混淆
+- **测试环境** - 创建专用测试网络
+- **生产环境** - 确保只有授权节点能加入生产网络
+- **多租户** - 为不同客户创建隔离的 P2P 网络
+
+### 生成 PSK
+
+使用 controller 命令生成 PSK：
+
+```bash
+# 生成 PSK（默认保存到 ~/.p2p-playground/psk）
+controller psk
+
+# 指定输出路径
+controller psk --output /path/to/psk
+```
+
+输出示例：
+```
+Generating pre-shared key...
+
+✓ PSK generated successfully!
+  File: /Users/atom/.p2p-playground/psk
+
+⚠️  Keep this key secure and never share it publicly.
+📤 Distribute this key to all nodes that should join your network.
+
+PSK (hex): a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
+
+To use this PSK, add the following to your configuration:
+
+  security:
+    enable_auth: true
+    psk: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+```
+
+**重要**：
+- PSK 是 32 字节（256 位）的随机密钥
+- PSK 以十六进制格式（64 个字符）存储和传输
+- 所有需要通信的节点必须使用相同的 PSK
+- 妥善保管 PSK，就像保管密码一样
+
+### 配置 PSK 认证
+
+#### Controller 配置
+
+在 `~/.p2p-playground/controller.yaml` 中配置：
+
+```yaml
+security:
+  enable_auth: true  # 启用 PSK 认证
+  psk: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+```
+
+#### Daemon 配置
+
+在 daemon 配置文件中配置相同的 PSK：
+
+```yaml
+# daemon.yaml
+security:
+  enable_auth: true  # 启用 PSK 认证
+  psk: "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+
+  # 可选：限制只允许特定 peer ID 连接（白名单）
+  trusted_peers:
+    - "12D3KooWBaiJyfJwTo4HCtGv3qBkZnMcuK3KvHmvW7SomeExamplePeerID1"
+    - "12D3KooWBaiJyfJwTo4HCtGv3qBkZnMcuK3KvHmvW7SomeExamplePeerID2"
+```
+
+### PSK 认证原理
+
+1. **网络隔离** - 使用不同 PSK 的节点无法相互连接
+2. **握手验证** - libp2p 在连接建立时验证 PSK
+3. **连接拒绝** - PSK 不匹配的连接会被立即拒绝
+4. **透明加密** - PSK 还用于增强传输加密强度
+
+### 连接白名单（可选）
+
+除了 PSK 认证，还可以配置 `trusted_peers` 白名单进一步限制连接：
+
+```yaml
+security:
+  enable_auth: true
+  psk: "..."
+  trusted_peers:
+    - "12D3KooW..."  # 只允许这些 peer ID 连接
+```
+
+**工作原理**：
+- 即使 PSK 匹配，也只允许白名单中的 peer ID 连接
+- 提供双重保护（PSK + peer ID）
+- 适合高安全要求场景
+
+**获取 peer ID**：
+```bash
+# 查看节点列表及其 peer ID
+controller nodes
+
+# 输出示例
+Discovered 2 peer(s):
+1. Peer ID: 12D3KooWBaiJyfJwTo4HCtGv3qBkZnMcuK3KvHmvW7Example1
+   Addresses:
+     - /ip4/192.168.1.100/tcp/9000
+
+2. Peer ID: 12D3KooWBaiJyfJwTo4HCtGv3qBkZnMcuK3KvHmvW7Example2
+   Addresses:
+     - /ip4/192.168.1.101/tcp/9000
+```
+
+### PSK 最佳实践
+
+#### 开发环境
+```yaml
+security:
+  enable_auth: true
+  psk: "dev-environment-key-not-for-production-use-12345678901234567890ab"
+  # 不设置 trusted_peers，开发节点可以自由加入
+```
+
+#### 测试环境
+```yaml
+security:
+  enable_auth: true
+  psk: "test-environment-key-different-from-dev-567890abcdef1234567890ab"
+  # 可选：限制测试节点
+  trusted_peers:
+    - "12D3KooW..."  # 测试节点 1
+    - "12D3KooW..."  # 测试节点 2
+```
+
+#### 生产环境
+```yaml
+security:
+  enable_auth: true
+  psk: "production-use-strong-random-psk-generated-by-controller-psk-cmd"
+  # 强烈建议：使用白名单
+  trusted_peers:
+    - "12D3KooW..."  # 生产节点 1
+    - "12D3KooW..."  # 生产节点 2
+    - "12D3KooW..."  # 生产节点 3
+  # 其他安全配置
+  allow_unsigned_packages: false  # 拒绝未签名包
+```
+
+### PSK 管理建议
+
+1. **每个环境使用不同的 PSK** - 避免环境间交叉污染
+2. **定期轮换 PSK** - 建议每季度或每半年轮换一次
+3. **安全存储** - 使用密钥管理服务（Vault、AWS KMS 等）存储 PSK
+4. **最小权限** - 生产环境使用 PSK + trusted_peers 双重保护
+5. **审计日志** - 监控连接拒绝日志，发现异常访问尝试
+
+### 故障排查
+
+#### 连接失败：PSK 不匹配
+
+**症状**：节点无法相互发现或连接
+
+**日志示例**：
+```
+WARN  failed to connect to discovered peer  peer=12D3KooW...  error=failed to negotiate security protocol: protocol not supported
+```
+
+**解决方法**：
+1. 确认所有节点使用相同的 PSK
+2. 检查配置文件中的 PSK 格式（64 个十六进制字符）
+3. 确认 `enable_auth: true` 在所有节点都启用
+
+#### 连接被白名单拒绝
+
+**症状**：PSK 正确但仍然无法连接
+
+**日志示例**：
+```
+WARN  blocked connection from untrusted peer  peer=12D3KooW...
+```
+
+**解决方法**：
+1. 检查 `trusted_peers` 列表
+2. 将目标节点的 peer ID 添加到白名单
+3. 重启 daemon 使配置生效
+
+## TLS 1.3 传输加密
+
+### 概述
+
+所有 P2P 连接默认使用 TLS 1.3 或 Noise 协议进行端到端加密，无需手动配置。
+
+**特性**：
+- ✅ **默认启用** - 所有连接自动加密，无需配置
+- ✅ **TLS 1.3** - 使用最新的 TLS 标准
+- ✅ **Noise 协议** - 轻量级备选加密协议
+- ✅ **自动协商** - libp2p 自动选择最佳加密方案
+- ✅ **前向保密** - 支持 Forward Secrecy
+- ✅ **身份绑定** - 基于 peer ID 的身份认证
+
+### 工作原理
+
+libp2p 在连接建立时自动进行安全协商：
+
+```
+1. 节点 A 向节点 B 发起连接
+2. libp2p 协商安全协议：
+   - 优先尝试 TLS 1.3
+   - 如果不支持，回退到 Noise 协议
+3. 建立加密连接
+4. 绑定 peer ID（防止中间人攻击）
+5. 开始加密通信
+```
+
+### PSK 与 TLS 的关系
+
+PSK 和 TLS 是两层独立的安全机制：
+
+| 层次 | 机制 | 作用 |
+|------|------|------|
+| **网络层** | PSK 认证 | 控制**谁能加入**网络 |
+| **传输层** | TLS 1.3 | 保护**数据传输**的机密性和完整性 |
+
+**可以组合使用**：
+- ✅ 只用 TLS（默认） - 所有节点都能加入，但数据加密
+- ✅ PSK + TLS（推荐） - 只有授权节点能加入，且数据加密
+- ❌ 只用 PSK（不推荐） - libp2p 仍会使用 TLS，无法禁用
+
+**配置示例**（PSK + TLS）：
+```yaml
+security:
+  enable_auth: true  # PSK 网络认证
+  psk: "..."         # 限制谁能加入
+  # TLS 1.3 自动启用，无需配置
+```
+
+### 验证加密状态
+
+查看 daemon 启动日志：
+
+```
+INFO  libp2p host created  id=12D3KooW...  psk_enabled=true  trusted_peers=3
+```
+
+- `psk_enabled=true` - PSK 认证已启用
+- TLS 1.3 - 始终启用（libp2p 默认行为）
+
 ## Controller 配置
 
 ### 配置文件支持
@@ -116,6 +369,11 @@ storage:
   keys_dir: ~/.p2p-playground-controller/keys
 
 security:
+  # PSK 网络认证（可选）
+  enable_auth: true
+  psk: "your-psk-here-generated-by-controller-psk-command"
+
+  # 应用包签名策略
   allow_unsigned_packages: false  # 拒绝未签名包（推荐）
 
 deployment:
@@ -154,6 +412,15 @@ daemon 会自动加载该目录下所有 `.pub` 文件作为可信公钥。
 ```yaml
 # daemon.yaml
 security:
+  # PSK 网络认证（可选）
+  enable_auth: true
+  psk: "your-psk-here-same-as-controller"
+
+  # 可信节点白名单（可选，与 PSK 配合使用）
+  trusted_peers:
+    - "12D3KooW..."  # 允许连接的 peer ID
+
+  # 应用包签名验证策略
   # 是否允许部署未签名的应用包
   allow_unsigned_packages: false  # ⚠️ 默认 false（拒绝未签名包）
 
@@ -336,8 +603,8 @@ daemon 支持同时信任多个公钥，这在以下场景很有用：
 
 以下功能计划在后续版本中实现：
 
-1. **PSK 节点认证** - 使用预共享密钥进行节点级别的认证
-2. **证书认证** - 支持 X.509 证书进行节点认证
-3. **签名时间戳** - 记录签名时间，防止重放攻击
-4. **撤销列表** - 支持撤销已泄露的密钥
-5. **细粒度策略** - 按应用、标签等维度配置不同的安全策略
+1. **证书认证** - 支持 X.509 证书进行节点认证（替代或补充 PSK）
+2. **签名时间戳** - 记录签名时间，防止重放攻击
+3. **撤销列表** - 支持撤销已泄露的密钥
+4. **细粒度策略** - 按应用、标签等维度配置不同的安全策略
+5. **审计日志** - 完整的安全事件审计追踪
