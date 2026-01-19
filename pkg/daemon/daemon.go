@@ -21,6 +21,8 @@ import (
 
 const (
 	deployProtocolID = "/p2p-playground/deploy/1.0.0"
+	listProtocolID   = "/p2p-playground/list/1.0.0"
+	logsProtocolID   = "/p2p-playground/logs/1.0.0"
 )
 
 // Daemon coordinates all daemon components
@@ -100,8 +102,10 @@ func (d *Daemon) Start() error {
 	// Initialize transfer manager
 	d.transfer = transfer.New(d.host, d.logger)
 
-	// Register deploy protocol handler
+	// Register protocol handlers
 	d.host.SetStreamHandler(deployProtocolID, d.handleDeployRequest)
+	d.host.SetStreamHandler(listProtocolID, d.handleListRequest)
+	d.host.SetStreamHandler(logsProtocolID, d.handleLogsRequest)
 
 	d.logger.Info("daemon started",
 		"peer_id", host.ID(),
@@ -334,4 +338,195 @@ func (d *Daemon) sendDeployResponse(stream types.Stream, success bool, appID str
 	}
 
 	d.logger.Info("deploy response sent", "success", success, "app_id", appID)
+}
+
+// ListAppsResponse represents the response for list apps request
+type ListAppsResponse struct {
+	Success bool                 `json:"success"`
+	Apps    []*types.Application `json:"apps,omitempty"`
+	Error   string               `json:"error,omitempty"`
+}
+
+// handleListRequest handles incoming list apps requests
+func (d *Daemon) handleListRequest(stream types.Stream) {
+	defer stream.Close()
+
+	d.logger.Info("received list apps request")
+
+	// Get all applications
+	apps, err := d.runtime.List(d.ctx)
+	if err != nil {
+		d.logger.Error("failed to list apps", "error", err)
+		d.sendListResponse(stream, false, nil, err.Error())
+		return
+	}
+
+	d.sendListResponse(stream, true, apps, "")
+}
+
+// sendListResponse sends list apps response
+func (d *Daemon) sendListResponse(stream types.Stream, success bool, apps []*types.Application, errMsg string) {
+	resp := ListAppsResponse{
+		Success: success,
+		Apps:    apps,
+		Error:   errMsg,
+	}
+
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		d.logger.Error("failed to marshal response", "error", err)
+		return
+	}
+
+	// Send response size
+	respSize := uint32(len(respBytes))
+	if err := binary.Write(stream, binary.BigEndian, respSize); err != nil {
+		d.logger.Error("failed to send response size", "error", err)
+		return
+	}
+
+	// Send response
+	if _, err := stream.Write(respBytes); err != nil {
+		d.logger.Error("failed to send response", "error", err)
+		return
+	}
+
+	d.logger.Info("list response sent", "app_count", len(apps))
+}
+
+// LogsRequest represents a logs request
+type LogsRequest struct {
+	AppID  string `json:"app_id"`
+	Follow bool   `json:"follow"`
+	Tail   int    `json:"tail"` // Number of lines from end, 0 for all
+}
+
+// LogsResponse represents a logs response
+type LogsResponse struct {
+	Success bool   `json:"success"`
+	Logs    string `json:"logs,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// handleLogsRequest handles incoming logs requests
+func (d *Daemon) handleLogsRequest(stream types.Stream) {
+	defer stream.Close()
+
+	d.logger.Info("received logs request")
+
+	// Read request header
+	var headerSize uint32
+	if err := binary.Read(stream, binary.BigEndian, &headerSize); err != nil {
+		d.logger.Error("failed to read header size", "error", err)
+		d.sendLogsResponse(stream, false, "", err.Error())
+		return
+	}
+
+	headerBytes := make([]byte, headerSize)
+	if _, err := io.ReadFull(stream, headerBytes); err != nil {
+		d.logger.Error("failed to read header", "error", err)
+		d.sendLogsResponse(stream, false, "", err.Error())
+		return
+	}
+
+	var req LogsRequest
+	if err := json.Unmarshal(headerBytes, &req); err != nil {
+		d.logger.Error("failed to parse request", "error", err)
+		d.sendLogsResponse(stream, false, "", err.Error())
+		return
+	}
+
+	d.logger.Info("logs request details", "app_id", req.AppID, "follow", req.Follow, "tail", req.Tail)
+
+	// Get logs
+	logsReader, err := d.runtime.Logs(d.ctx, req.AppID, req.Follow)
+	if err != nil {
+		d.logger.Error("failed to get logs", "error", err)
+		d.sendLogsResponse(stream, false, "", err.Error())
+		return
+	}
+	defer logsReader.Close()
+
+	// Read all logs
+	logsBytes, err := io.ReadAll(logsReader)
+	if err != nil {
+		d.logger.Error("failed to read logs", "error", err)
+		d.sendLogsResponse(stream, false, "", err.Error())
+		return
+	}
+
+	logs := string(logsBytes)
+
+	// Apply tail if requested
+	if req.Tail > 0 {
+		lines := make([]string, 0)
+		for _, line := range splitLines(logs) {
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+		if len(lines) > req.Tail {
+			lines = lines[len(lines)-req.Tail:]
+		}
+		logs = joinLines(lines)
+	}
+
+	d.sendLogsResponse(stream, true, logs, "")
+}
+
+// sendLogsResponse sends logs response
+func (d *Daemon) sendLogsResponse(stream types.Stream, success bool, logs string, errMsg string) {
+	resp := LogsResponse{
+		Success: success,
+		Logs:    logs,
+		Error:   errMsg,
+	}
+
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		d.logger.Error("failed to marshal response", "error", err)
+		return
+	}
+
+	// Send response size
+	respSize := uint32(len(respBytes))
+	if err := binary.Write(stream, binary.BigEndian, respSize); err != nil {
+		d.logger.Error("failed to send response size", "error", err)
+		return
+	}
+
+	// Send response
+	if _, err := stream.Write(respBytes); err != nil {
+		d.logger.Error("failed to send response", "error", err)
+		return
+	}
+
+	d.logger.Info("logs response sent", "log_size", len(logs))
+}
+
+// Helper functions
+func splitLines(s string) []string {
+	lines := make([]string, 0)
+	start := 0
+	for i, c := range s {
+		if c == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func joinLines(lines []string) string {
+	result := ""
+	for i, line := range lines {
+		result += line
+		if i < len(lines)-1 {
+			result += "\n"
+		}
+	}
+	return result
 }

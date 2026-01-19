@@ -31,12 +31,14 @@ This document outlines the architecture and implementation strategy for P2P Play
 - ✓ Implemented pkg/daemon/ - Daemon orchestration
 - ✓ All core functionality working
 
-**Phase 1D: CLI Implementation** (60%)
+**Phase 1D: CLI Implementation** (100%)
 - ✓ Implemented cmd/daemon/ - Daemon CLI (start command fully functional)
 - ✓ Implemented cmd/controller/ - Controller CLI framework
 - ✓ Implemented controller nodes command (P2P node discovery)
+- ✓ Implemented controller deploy command (with progress tracking)
+- ✓ Implemented controller list command (application listing)
+- ✓ Implemented controller logs command (with --tail and --follow support)
 - ✓ Created example configurations
-- ⚠️ Controller deploy/list commands not yet implemented
 - ✓ Both binaries build successfully (daemon: 35MB, controller: 5.3MB)
 
 **Testing Infrastructure** (100%)
@@ -47,11 +49,9 @@ This document outlines the architecture and implementation strategy for P2P Play
 
 ### 🚧 In Progress
 
-**Phase 1D: CLI Implementation** (40% remaining)
-- ⏳ Implement controller deploy command
-- ⏳ Implement controller list command
-- ⏳ Implement controller logs command
-- ⏳ End-to-end deployment testing
+**Phase 1D: Verification and Documentation**
+- ⏳ Complete end-to-end testing documentation
+- ⏳ Prepare for Phase 2 (Security)
 
 ### ⏸️ Not Started
 
@@ -76,10 +76,13 @@ This document outlines the architecture and implementation strategy for P2P Play
 **Working Features:**
 - P2P networking with libp2p v0.46.0
 - mDNS automatic node discovery
-- Daemon process management
+- Daemon process management with log capture
+- Application deployment via P2P (with progress tracking)
+- Application listing across nodes
+- Log streaming from deployed applications
 - Configuration system
 - Logging infrastructure
-- Node discovery from controller
+- Complete CLI tooling (deploy, list, logs, nodes)
 
 **Network Topology (Docker):**
 ```
@@ -92,10 +95,10 @@ Controller can discover all 3 daemons
 ```
 
 **Next Steps:**
-1. Implement controller deploy command with file transfer
-2. Test end-to-end application deployment
-3. Implement application listing and status commands
-4. Begin Phase 2 (Security)
+1. ✓ Phase 1 (MVP) Complete - All core functionality working
+2. Document end-to-end testing procedures
+3. Begin Phase 2 (Security) - Ed25519 signing, PSK authentication
+4. Implement Phase 3A (Health & Resources) - Health checks, resource limits
 
 ## Project Structure
 
