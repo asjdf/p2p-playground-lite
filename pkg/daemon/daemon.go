@@ -77,10 +77,16 @@ func (d *Daemon) Start() error {
 
 	// Initialize P2P host
 	hostConfig := &p2p.HostConfig{
-		ListenAddrs:  d.config.Node.ListenAddrs,
-		PSK:          d.config.Security.PSK,
-		EnableAuth:   d.config.Security.EnableAuth,
-		TrustedPeers: d.config.Security.TrustedPeers,
+		ListenAddrs:          d.config.Node.ListenAddrs,
+		PSK:                  d.config.Security.PSK,
+		EnableAuth:           d.config.Security.EnableAuth,
+		TrustedPeers:         d.config.Security.TrustedPeers,
+		BootstrapPeers:       d.config.Node.BootstrapPeers,
+		DisableDHT:           d.config.Node.DisableDHT,
+		DHTMode:              d.config.Node.DHTMode,
+		DisableNATService:    d.config.Node.DisableNATService,
+		DisableAutoRelay:     d.config.Node.DisableAutoRelay,
+		DisableHolePunching:  d.config.Node.DisableHolePunching,
 	}
 	host, err := p2p.NewHost(d.ctx, hostConfig, d.logger)
 	if err != nil {

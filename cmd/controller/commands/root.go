@@ -27,10 +27,16 @@ var (
 // createP2PHost creates a P2P host using global configuration
 func createP2PHost(ctx context.Context) (*p2p.Host, error) {
 	hostConfig := &p2p.HostConfig{
-		ListenAddrs:  globalConfig.Node.ListenAddrs,
-		PSK:          globalConfig.Security.PSK,
-		EnableAuth:   globalConfig.Security.EnableAuth,
-		TrustedPeers: []string{}, // Controller doesn't restrict trusted peers
+		ListenAddrs:         globalConfig.Node.ListenAddrs,
+		PSK:                 globalConfig.Security.PSK,
+		EnableAuth:          globalConfig.Security.EnableAuth,
+		TrustedPeers:        []string{}, // Controller doesn't restrict trusted peers
+		BootstrapPeers:      globalConfig.Node.BootstrapPeers,
+		DisableDHT:          globalConfig.Node.DisableDHT,
+		DHTMode:             globalConfig.Node.DHTMode,
+		DisableNATService:   globalConfig.Node.DisableNATService,
+		DisableAutoRelay:    globalConfig.Node.DisableAutoRelay,
+		DisableHolePunching: globalConfig.Node.DisableHolePunching,
 	}
 
 	host, err := p2p.NewHost(ctx, hostConfig, globalLogger)

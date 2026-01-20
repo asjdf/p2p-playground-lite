@@ -6,8 +6,34 @@ node:
     - /ip4/0.0.0.0/tcp/9000
     - /ip4/0.0.0.0/udp/9000/quic
 
-  # Enable mDNS for local network discovery
+  # Enable mDNS for local network discovery (default: true)
   enable_mdns: true
+
+  # Bootstrap peers for initial connection (optional)
+  # If not specified and DHT is enabled, will use default IPFS bootstrap nodes
+  bootstrap_peers: []
+  # Example custom bootstrap peers:
+  # bootstrap_peers:
+  #   - /ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ
+  #   - /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
+
+  # Disable DHT for peer discovery (default: false, DHT is enabled by default)
+  # Set to true if you only want to use mDNS for local network discovery
+  disable_dht: false
+
+  # DHT mode: "client" or "server" (default: "server")
+  # Use "client" for nodes behind NAT that don't need to serve DHT queries
+  # Use "server" for nodes with public IP or relay capability
+  dht_mode: server
+
+  # Disable NAT traversal service (default: false)
+  disable_nat_service: false
+
+  # Disable automatic relay for NAT traversal (default: false)
+  disable_auto_relay: false
+
+  # Disable hole punching for direct connections (default: false)
+  disable_hole_punching: false
 
   # Node labels for grouping
   labels:

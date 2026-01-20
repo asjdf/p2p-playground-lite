@@ -120,8 +120,23 @@ type NodeConfig struct {
 	// BootstrapPeers are initial peers to connect to
 	BootstrapPeers []string `yaml:"bootstrap_peers" mapstructure:"bootstrap_peers"`
 
-	// EnableMDNS enables mDNS discovery
+	// EnableMDNS enables mDNS discovery (default: true)
 	EnableMDNS bool `yaml:"enable_mdns" mapstructure:"enable_mdns"`
+
+	// DisableDHT disables DHT for peer discovery (default: false, DHT is enabled by default)
+	DisableDHT bool `yaml:"disable_dht" mapstructure:"disable_dht"`
+
+	// DHTMode is the DHT mode: "client" or "server" (default: "server")
+	DHTMode string `yaml:"dht_mode" mapstructure:"dht_mode"`
+
+	// DisableNATService disables NAT traversal service (default: false, NAT service is enabled by default)
+	DisableNATService bool `yaml:"disable_nat_service" mapstructure:"disable_nat_service"`
+
+	// DisableAutoRelay disables automatic relay for NAT traversal (default: false, auto relay is enabled by default)
+	DisableAutoRelay bool `yaml:"disable_auto_relay" mapstructure:"disable_auto_relay"`
+
+	// DisableHolePunching disables hole punching for direct connections (default: false, hole punching is enabled by default)
+	DisableHolePunching bool `yaml:"disable_hole_punching" mapstructure:"disable_hole_punching"`
 
 	// Labels are node labels for organization
 	Labels map[string]string `yaml:"labels" mapstructure:"labels"`
@@ -288,6 +303,11 @@ func applyDaemonDefaults(cfg *DaemonConfig) {
 	// Always set EnableMDNS to true when applying defaults
 	cfg.Node.EnableMDNS = true
 
+	// Set default DHT mode to "server"
+	if cfg.Node.DHTMode == "" {
+		cfg.Node.DHTMode = "server"
+	}
+
 	if cfg.Storage.DataDir == "" {
 		cfg.Storage.DataDir = "~/.p2p-playground"
 	}
@@ -341,6 +361,11 @@ func applyControllerDefaults(cfg *ControllerConfig) {
 	}
 	// Always set EnableMDNS to true when applying defaults
 	cfg.Node.EnableMDNS = true
+
+	// Set default DHT mode to "server"
+	if cfg.Node.DHTMode == "" {
+		cfg.Node.DHTMode = "server"
+	}
 
 	if cfg.Storage.DataDir == "" {
 		cfg.Storage.DataDir = "~/.p2p-playground-controller"

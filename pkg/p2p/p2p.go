@@ -3,25 +3,40 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/asjdf/p2p-playground-lite/pkg/security"
 	"github.com/asjdf/p2p-playground-lite/pkg/types"
 	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/control"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/pnet"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
 )
 
+// DefaultBootstrapPeers are the default IPFS bootstrap nodes
+var DefaultBootstrapPeers = []string{
+	"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+	"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+	"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+	"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+	"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+	"/ip4/104.131.131.82/udp/4001/quic/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+}
+
 // Host wraps libp2p host
 type Host struct {
 	host   host.Host
+	dht    *dht.IpfsDHT
 	logger types.Logger
 }
 
@@ -38,6 +53,24 @@ type HostConfig struct {
 
 	// TrustedPeers are peer IDs allowed to connect (if non-empty)
 	TrustedPeers []string
+
+	// BootstrapPeers are initial peers to connect to
+	BootstrapPeers []string
+
+	// DisableDHT disables Distributed Hash Table for peer discovery
+	DisableDHT bool
+
+	// DHTMode is the DHT mode: "client" or "server" (default: "server")
+	DHTMode string
+
+	// DisableNATService disables NAT traversal service
+	DisableNATService bool
+
+	// DisableAutoRelay disables automatic relay for NAT traversal
+	DisableAutoRelay bool
+
+	// DisableHolePunching disables hole punching for direct connections
+	DisableHolePunching bool
 }
 
 // NewHost creates a new P2P host
@@ -58,6 +91,46 @@ func NewHost(ctx context.Context, config *HostConfig, logger types.Logger) (*Hos
 		// Enable TLS 1.3 and Noise security transports
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 		libp2p.Security(noise.ID, noise.New),
+	}
+
+	// Add NAT traversal options (enabled by default)
+	if !config.DisableNATService {
+		opts = append(opts, libp2p.EnableNATService())
+		logger.Info("NAT service enabled")
+	}
+	if !config.DisableAutoRelay {
+		opts = append(opts, libp2p.EnableAutoRelay())
+		logger.Info("auto relay enabled")
+	}
+	if !config.DisableHolePunching {
+		opts = append(opts, libp2p.EnableHolePunching())
+		logger.Info("hole punching enabled")
+	}
+
+	// Add DHT routing (enabled by default)
+	var kadDHT *dht.IpfsDHT
+	if !config.DisableDHT {
+		opts = append(opts, libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			// Determine DHT mode (default: server)
+			var dhtMode dht.ModeOpt
+			if config.DHTMode == "client" {
+				dhtMode = dht.ModeClient
+			} else {
+				dhtMode = dht.ModeServer
+			}
+
+			var err error
+			kadDHT, err = dht.New(ctx, h, dht.Mode(dhtMode))
+			if err != nil {
+				return nil, err
+			}
+			return kadDHT, nil
+		}))
+		dhtModeStr := config.DHTMode
+		if dhtModeStr == "" {
+			dhtModeStr = "server"
+		}
+		logger.Info("DHT enabled", "mode", dhtModeStr)
 	}
 
 	// Add PSK if authentication is enabled
@@ -90,10 +163,34 @@ func NewHost(ctx context.Context, config *HostConfig, logger types.Logger) (*Hos
 		"addrs", h.Addrs(),
 		"psk_enabled", config.EnableAuth && config.PSK != "",
 		"trusted_peers", len(config.TrustedPeers),
+		"dht_enabled", !config.DisableDHT,
 	)
+
+	// Bootstrap DHT if enabled
+	if !config.DisableDHT && kadDHT != nil {
+		if err := kadDHT.Bootstrap(ctx); err != nil {
+			logger.Warn("failed to bootstrap DHT", "error", err)
+		} else {
+			logger.Info("DHT bootstrap started")
+		}
+	}
+
+	// Connect to bootstrap peers
+	// If DHT is enabled and no bootstrap peers are configured, use default IPFS bootstrap nodes
+	bootstrapPeers := config.BootstrapPeers
+	if !config.DisableDHT && len(bootstrapPeers) == 0 {
+		bootstrapPeers = DefaultBootstrapPeers
+		logger.Info("no bootstrap peers configured, using default IPFS bootstrap nodes")
+	}
+
+	if len(bootstrapPeers) > 0 {
+		logger.Info("connecting to bootstrap peers", "count", len(bootstrapPeers))
+		go connectToBootstrapPeers(ctx, h, bootstrapPeers, logger)
+	}
 
 	return &Host{
 		host:   h,
+		dht:    kadDHT,
 		logger: logger,
 	}, nil
 }
@@ -310,4 +407,44 @@ func (g *connectionGater) InterceptSecured(_ network.Direction, p peer.ID, _ net
 // InterceptUpgraded is called after the connection has been upgraded
 func (g *connectionGater) InterceptUpgraded(_ network.Conn) (bool, control.DisconnectReason) {
 	return true, 0
+}
+
+// connectToBootstrapPeers connects to bootstrap peers in the background
+func connectToBootstrapPeers(ctx context.Context, h host.Host, bootstrapPeers []string, logger types.Logger) {
+	var wg sync.WaitGroup
+
+	for _, addrStr := range bootstrapPeers {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+
+			// Parse multiaddr
+			maddr, err := multiaddr.NewMultiaddr(addr)
+			if err != nil {
+				logger.Warn("invalid bootstrap peer address", "addr", addr, "error", err)
+				return
+			}
+
+			// Extract peer info
+			peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+			if err != nil {
+				logger.Warn("failed to parse bootstrap peer info", "addr", addr, "error", err)
+				return
+			}
+
+			// Connect with timeout
+			connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			if err := h.Connect(connectCtx, *peerInfo); err != nil {
+				logger.Warn("failed to connect to bootstrap peer", "peer", peerInfo.ID, "error", err)
+				return
+			}
+
+			logger.Info("connected to bootstrap peer", "peer", peerInfo.ID)
+		}(addrStr)
+	}
+
+	wg.Wait()
+	logger.Info("bootstrap peer connections completed")
 }

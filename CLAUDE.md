@@ -144,9 +144,19 @@ fix(daemon): 修复包签名验证逻辑
 
 ### P2P Network
 - **Library**: go-libp2p
-- **Node Discovery**: mDNS (local network broadcast) + manual configuration
+- **Node Discovery**:
+  - **mDNS**: Local network broadcast for LAN discovery (enabled by default)
+  - **DHT (Kademlia)**: Distributed Hash Table for public network peer discovery (enabled by default)
+  - **Bootstrap Nodes**: Connects to IPFS bootstrap nodes by default when DHT is enabled, or custom bootstrap peers if configured
 - **Transport**: TCP + QUIC with TLS 1.3
+- **NAT Traversal**:
+  - **NAT Service**: UPnP/NAT-PMP for automatic port mapping (enabled by default)
+  - **Auto Relay**: Automatic relay selection for nodes behind NAT (enabled by default)
+  - **Hole Punching**: DCUtR (Direct Connection Upgrade through Relay) for NAT traversal (enabled by default)
 - **Use Case**: Hybrid scenarios (LAN + WAN)
+  - **LAN**: mDNS for instant local discovery
+  - **WAN**: DHT + Bootstrap nodes + NAT traversal for global connectivity
+  - **Private Networks**: PSK authentication to create isolated P2P networks on public infrastructure
 
 ### Application Package Format
 Applications are distributed as `tar.gz` packages containing:
@@ -207,11 +217,78 @@ Nodes can be labeled (e.g., `env=test`, `region=cn-north`) for selective deploym
 - Optional aggregated viewing across nodes
 - Log retention policies by time/size
 
+## Public Network Deployment
+
+P2P Playground Lite supports deployment across public networks (WAN) with automatic peer discovery and NAT traversal.
+
+### How It Works
+
+1. **DHT-based Discovery**: Uses Kademlia DHT for peer discovery across the internet
+2. **Bootstrap Nodes**: Connects to IPFS bootstrap nodes by default (or custom bootstrap peers)
+3. **NAT Traversal**: Automatic NAT traversal using relay, UPnP, and hole punching
+4. **Private Networks**: Use PSK authentication to create isolated networks on public infrastructure
+
+### Configuration
+
+By default, all features are **enabled** for maximum connectivity:
+
+```yaml
+node:
+  # DHT is enabled by default (set disable_dht: true to disable)
+  disable_dht: false
+  dht_mode: server  # or "client" for nodes behind NAT
+
+  # Bootstrap peers (uses IPFS nodes by default if empty)
+  bootstrap_peers: []
+
+  # NAT traversal features (all enabled by default)
+  disable_nat_service: false
+  disable_auto_relay: false
+  disable_hole_punching: false
+```
+
+### Use Cases
+
+**Scenario 1: Developer working from home, company test machines in office**
+- Both sides use default DHT configuration
+- Automatic discovery through IPFS bootstrap network
+- NAT traversal establishes direct or relayed connections
+- Optional PSK for security: only nodes with the same key can connect
+
+**Scenario 2: Multi-region distributed testing**
+- Deploy daemons in different geographic locations
+- Automatic peer discovery via DHT
+- Use node labels (`region=us-east`, `region=eu-west`) for selective deployment
+
+**Scenario 3: LAN-only deployment (e.g., isolated test network)**
+```yaml
+node:
+  enable_mdns: true      # Keep local discovery
+  disable_dht: true      # Disable public network discovery
+  bootstrap_peers: []    # No bootstrap connections
+```
+
+### Security Recommendations
+
+For production or sensitive environments:
+1. **Enable PSK authentication**: All nodes must share the same key
+2. **Use trusted_peers whitelist**: Restrict connections to known peer IDs
+3. **Custom bootstrap nodes**: Deploy your own bootstrap infrastructure
+4. **Disable unsigned packages**: Require code signing for all deployments
+
+### Troubleshooting
+
+If nodes cannot discover each other:
+1. Check firewall allows UDP (for QUIC and hole punching)
+2. Wait 15-30 seconds for DHT bootstrap to complete
+3. Verify bootstrap peer connectivity with logs
+4. For restrictive NAT, ensure at least one node has a public IP or use a relay
+
 ## Development Roadmap
 
 See `docs/DESIGN.md` for detailed phases. High-level stages:
-1. **Phase 1 (MVP)**: P2P networking, mDNS discovery, basic packaging, file transfer, process management, CLI
-2. **Phase 2**: Security (authentication, signing), health checks, resource limits, logging
-3. **Phase 3**: Version management, multi-version support, auto-updates, node labels
+1. **Phase 1 (MVP)**: P2P networking, mDNS discovery, basic packaging, file transfer, process management, CLI ✅
+2. **Phase 2**: Security (authentication, signing), health checks, resource limits, logging ✅
+3. **Phase 3**: Version management, multi-version support, auto-updates, node labels ✅ (DHT + NAT traversal added)
 4. **Phase 4**: gRPC/HTTP APIs, Web Dashboard
 5. **Phase 5**: Production optimization, monitoring, documentation
