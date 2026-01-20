@@ -1,4 +1,4 @@
-package commands
+package run
 
 import (
 	"bufio"
@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/asjdf/p2p-playground-lite/cmd/controller/commands/common"
 	"github.com/asjdf/p2p-playground-lite/pkg/consts"
 	"github.com/asjdf/p2p-playground-lite/pkg/p2p"
 	pkgmanager "github.com/asjdf/p2p-playground-lite/pkg/package"
@@ -23,13 +24,14 @@ import (
 )
 
 var (
-	runNodeID     string
-	runCleanup    bool
-	runNoSign     bool
-	runPrivateKey string
+	nodeID     string
+	cleanup    bool
+	noSign     bool
+	privateKey string
 )
 
-var runCmd = &cobra.Command{
+// Cmd represents the run command
+var Cmd = &cobra.Command{
 	Use:   "run [app-directory]",
 	Short: "Build, deploy and run an application (like go run)",
 	Long: `Build an application package, deploy it to nodes, and monitor logs in real-time.
@@ -58,7 +60,7 @@ Use --node to deploy to a specific node only.`,
 		fmt.Printf("Building and running application from: %s\n", appDir)
 
 		// Create P2P host
-		host, err := createP2PHost(ctx)
+		host, err := common.CreateP2PHost(ctx)
 		if err != nil {
 			return err
 		}
@@ -71,9 +73,9 @@ Use --node to deploy to a specific node only.`,
 		time.Sleep(3 * time.Second)
 
 		var targetPeerIDs []string
-		if runNodeID != "" {
-			targetPeerIDs = []string{runNodeID}
-			fmt.Printf("Using specified node: %s\n", runNodeID)
+		if nodeID != "" {
+			targetPeerIDs = []string{nodeID}
+			fmt.Printf("Using specified node: %s\n", nodeID)
 		} else {
 			peers := host.Peers()
 			if len(peers) == 0 {
@@ -104,7 +106,7 @@ Use --node to deploy to a specific node only.`,
 		fmt.Printf("Package created: %s\n", pkgPath)
 
 		// Cleanup package file after deployment if requested
-		if runCleanup {
+		if cleanup {
 			defer func() {
 				_ = os.Remove(pkgPath)
 				_ = os.Remove(pkgPath + ".sig")
@@ -113,9 +115,9 @@ Use --node to deploy to a specific node only.`,
 
 		// Sign package if requested
 		var signature []byte
-		if !runNoSign && runPrivateKey != "" {
+		if !noSign && privateKey != "" {
 			fmt.Println("\nSigning package...")
-			signer, err := security.LoadSigner(runPrivateKey)
+			signer, err := security.LoadSigner(privateKey)
 			if err != nil {
 				return fmt.Errorf("failed to load private key: %w", err)
 			}
@@ -128,12 +130,12 @@ Use --node to deploy to a specific node only.`,
 			// Save signature
 			sigPath := pkgPath + ".sig"
 			if err := os.WriteFile(sigPath, signature, 0644); err != nil {
-				globalLogger.Warn("failed to save signature file", "error", err)
+				common.GlobalLogger.Warn("failed to save signature file", "error", err)
 			} else {
-				globalLogger.Info("package signed", "sig_path", sigPath)
+				common.GlobalLogger.Info("package signed", "sig_path", sigPath)
 			}
-		} else if !runNoSign {
-			globalLogger.Warn("no private key specified, deploying without signature")
+		} else if !noSign {
+			common.GlobalLogger.Warn("no private key specified, deploying without signature")
 		}
 
 		// Get package info
@@ -155,7 +157,7 @@ Use --node to deploy to a specific node only.`,
 
 		for _, peerID := range targetPeerIDs {
 			go func(pid string) {
-				appID, err := deployPackage(ctx, host, pid, pkgPath, fileInfo.Size(), true, globalLogger)
+				appID, err := common.DeployPackage(ctx, host, pid, pkgPath, fileInfo.Size(), true, common.GlobalLogger)
 				results <- deploymentResult{peerID: pid, appID: appID, err: err}
 			}(peerID)
 		}
@@ -202,10 +204,10 @@ Use --node to deploy to a specific node only.`,
 		// Start log streaming for each node in separate goroutines
 		for peerID, appID := range deployments {
 			go func(pid, aid string) {
-				if err := streamLogs(logsCtx, host, pid, aid, globalLogger); err != nil {
+				if err := streamLogs(logsCtx, host, pid, aid, common.GlobalLogger); err != nil {
 					// Only log errors if context wasn't cancelled
 					if logsCtx.Err() == nil {
-						globalLogger.Warn("log streaming stopped", "peer", pid, "error", err)
+						common.GlobalLogger.Warn("log streaming stopped", "peer", pid, "error", err)
 					}
 				}
 			}(peerID, appID)
@@ -229,7 +231,7 @@ func streamLogs(ctx context.Context, host *p2p.Host, peerID string, appID string
 	defer func() { _ = stream.Close() }()
 
 	// Prepare logs request (follow mode)
-	req := LogsRequest{
+	req := common.LogsRequest{
 		AppID:  appID,
 		Follow: true,
 		Tail:   0, // Get all logs
@@ -265,7 +267,7 @@ func streamLogs(ctx context.Context, host *p2p.Host, peerID string, appID string
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var resp LogsResponse
+	var resp common.LogsResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
@@ -312,10 +314,8 @@ func streamLogs(ctx context.Context, host *p2p.Host, peerID string, appID string
 }
 
 func init() {
-	runCmd.Flags().StringVar(&runNodeID, "node", "", "target node peer ID")
-	runCmd.Flags().BoolVar(&runCleanup, "cleanup", true, "remove package file after deployment")
-	runCmd.Flags().BoolVar(&runNoSign, "no-sign", false, "skip package signing")
-	runCmd.Flags().StringVar(&runPrivateKey, "private-key", "", "path to private key file for signing")
-
-	rootCmd.AddCommand(runCmd)
+	Cmd.Flags().StringVar(&nodeID, "node", "", "target node peer ID")
+	Cmd.Flags().BoolVar(&cleanup, "cleanup", true, "remove package file after deployment")
+	Cmd.Flags().BoolVar(&noSign, "no-sign", false, "skip package signing")
+	Cmd.Flags().StringVar(&privateKey, "private-key", "", "path to private key file for signing")
 }

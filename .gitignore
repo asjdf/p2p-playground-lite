@@ -46,3 +46,10 @@ go.work.sum
 *.key
 # 允许提交公钥用于测试
 # *.pub
+
+# 运维文档 (包含敏感信息)
+docs/OPS.md
+
+# 交叉编译产物
+daemon-linux
+controller-linux

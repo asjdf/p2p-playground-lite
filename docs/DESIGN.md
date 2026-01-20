@@ -578,10 +578,12 @@ storage:
 - [x] 日志收集 - ✅ 基本功能已完成
 
 ### Phase 3: 高级功能
-- [ ] 版本管理
+- [x] **DHT 节点发现** - ✅ Kademlia DHT 已实现，支持公网节点发现
+- [x] **NAT 穿透** - ✅ 已实现 (NAT Service, Auto Relay, Hole Punching)
+- [ ] 版本管理 - 接口已定义，实现待完成
 - [ ] 多版本共存
 - [ ] 自动更新
-- [ ] 节点标签和分组
+- [ ] 节点标签和分组 - 数据结构已定义，选择性部署待实现
 
 ### Phase 4: API 和 UI（全量版）
 - [ ] gRPC API

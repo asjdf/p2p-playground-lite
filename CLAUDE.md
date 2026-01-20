@@ -16,13 +16,19 @@ P2P Playground Lite is a distributed application testing and deployment tool tha
 
 ### Key Features
 
+**Implemented:**
 - P2P-based application distribution using libp2p
 - Automated process lifecycle management (start/stop/restart)
-- Multi-version application support with rollback capability
 - Health checking and auto-restart
-- Resource limiting (CPU/memory)
-- Log collection and forwarding
-- Security: node authentication, file integrity checking, code signing, encrypted transmission
+- Log collection (basic file-based)
+- Security: PSK authentication, Ed25519 code signing, TLS 1.3 encrypted transmission
+- DHT-based peer discovery and NAT traversal
+
+**Planned (not yet implemented):**
+- Multi-version application support with rollback capability
+- Resource limiting (CPU/memory via cgroups)
+- Real-time log streaming via gRPC
+- Node label-based selective deployment
 
 ## Development Commands
 
@@ -151,7 +157,9 @@ fix(daemon): 修复包签名验证逻辑
 - **Transport**: TCP + QUIC with TLS 1.3
 - **NAT Traversal**:
   - **NAT Service**: UPnP/NAT-PMP for automatic port mapping (enabled by default)
+  - **Relay Service**: Allows node to act as a relay for other peers (enabled by default)
   - **Auto Relay**: Automatic relay selection for nodes behind NAT (enabled by default)
+  - **Static Relays**: Optional static relay list (e.g., IPFS bootstrap nodes) for predictable NAT traversal
   - **Hole Punching**: DCUtR (Direct Connection Upgrade through Relay) for NAT traversal (enabled by default)
 - **Use Case**: Hybrid scenarios (LAN + WAN)
   - **LAN**: mDNS for instant local discovery
@@ -173,12 +181,12 @@ Applications are distributed as `tar.gz` packages containing:
 3. **Code Signing**: GPG/Ed25519 signatures verified before execution
 4. **Transport Encryption**: libp2p TLS 1.3
 
-### Version Management
-- Semantic versioning (semver)
-- Multi-version coexistence on same node
-- Automatic updates with configurable strategies (immediate/graceful/manual)
-- Version rollback on health check failure
-- Version tags (latest, stable, dev)
+### Version Management (Planned - Not Yet Implemented)
+- Semantic versioning (semver) - data structures defined
+- Multi-version coexistence on same node - not implemented
+- Automatic updates with configurable strategies (immediate/graceful/manual) - not implemented
+- Version rollback on health check failure - not implemented
+- Version tags (latest, stable, dev) - not implemented
 
 ## Project Structure
 
@@ -208,14 +216,15 @@ p2p-playground-lite/
 1. **Lite Edition**: CLI only, minimal dependencies, suitable for CI/CD
 2. **Full Edition**: CLI + gRPC API + HTTP API + Web Dashboard
 
-### Node Grouping
-Nodes can be labeled (e.g., `env=test`, `region=cn-north`) for selective deployment and batch operations.
+### Node Grouping (Partially Implemented)
+Nodes can be labeled (e.g., `env=test`, `region=cn-north`) - labels are stored in config but selective deployment (`--labels` flag) is **not yet implemented**.
 
-### Log Management
-- Local log storage with rotation
-- Real-time log streaming via gRPC
-- Optional aggregated viewing across nodes
-- Log retention policies by time/size
+### Log Management (Partially Implemented)
+- Local log storage ✅
+- Log rotation - not implemented
+- Real-time log streaming via gRPC - not implemented (basic file-based logs only)
+- Aggregated viewing across nodes - not implemented
+- Log retention policies by time/size - not implemented
 
 ## Public Network Deployment
 
@@ -243,8 +252,17 @@ node:
 
   # NAT traversal features (all enabled by default)
   disable_nat_service: false
+  disable_relay_service: false  # Allow this node to relay for others
   disable_auto_relay: false
   disable_hole_punching: false
+
+  # Static relays for predictable NAT traversal (optional)
+  # If empty, uses DHT to find relays dynamically
+  static_relays:
+    - /dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN
+    - /dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa
+    - /dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb
+    - /dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt
 ```
 
 ### Use Cases
@@ -288,7 +306,7 @@ If nodes cannot discover each other:
 
 See `docs/DESIGN.md` for detailed phases. High-level stages:
 1. **Phase 1 (MVP)**: P2P networking, mDNS discovery, basic packaging, file transfer, process management, CLI ✅
-2. **Phase 2**: Security (authentication, signing), health checks, resource limits, logging ✅
-3. **Phase 3**: Version management, multi-version support, auto-updates, node labels ✅ (DHT + NAT traversal added)
-4. **Phase 4**: gRPC/HTTP APIs, Web Dashboard
+2. **Phase 2**: Security (PSK auth, Ed25519 signing, TLS 1.3) ✅, health checks ✅, auto-restart ✅, basic logging ✅, resource limits (cgroups) ❌
+3. **Phase 3**: DHT + NAT traversal ✅ | Version management ❌, multi-version support ❌, auto-updates ❌, node label-based deployment ❌
+4. **Phase 4**: gRPC/HTTP APIs, Web Dashboard, real-time log streaming
 5. **Phase 5**: Production optimization, monitoring, documentation

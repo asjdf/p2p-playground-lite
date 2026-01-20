@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/asjdf/p2p-playground-lite/pkg/config"
 	"github.com/asjdf/p2p-playground-lite/pkg/consts"
+	"github.com/asjdf/p2p-playground-lite/pkg/discovery"
 	"github.com/asjdf/p2p-playground-lite/pkg/logging"
 	"github.com/asjdf/p2p-playground-lite/pkg/p2p"
 	pkgmanager "github.com/asjdf/p2p-playground-lite/pkg/package"
@@ -26,6 +28,7 @@ type Daemon struct {
 	config     *config.DaemonConfig
 	logger     types.Logger
 	host       *p2p.Host
+	discovery  *discovery.Service
 	storage    *storage.FileStorage
 	pkgMgr     *pkgmanager.Manager
 	runtime    *runtime.Runtime
@@ -87,6 +90,8 @@ func (d *Daemon) Start() error {
 		DisableNATService:    d.config.Node.DisableNATService,
 		DisableAutoRelay:     d.config.Node.DisableAutoRelay,
 		DisableHolePunching:  d.config.Node.DisableHolePunching,
+		DisableRelayService:  d.config.Node.DisableRelayService,
+		StaticRelays:         d.config.Node.StaticRelays,
 	}
 	host, err := p2p.NewHost(d.ctx, hostConfig, d.logger)
 	if err != nil {
@@ -94,11 +99,29 @@ func (d *Daemon) Start() error {
 	}
 	d.host = host
 
+	// Start diagnostic logging every 30 seconds
+	host.StartDiagnosticLogging(d.ctx, 30*time.Second)
+
 	// Enable mDNS if configured
 	if d.config.Node.EnableMDNS {
 		if err := host.EnableMDNS(d.ctx); err != nil {
 			d.logger.Warn("failed to enable mDNS", "error", err)
 		}
+	}
+
+	// Initialize discovery service for gossip-based node discovery
+	discoverySvc, err := discovery.NewService(host.LibP2PHost(), d.logger, &discovery.Config{
+		NodeName:   d.config.Node.Name,
+		NodeLabels: d.config.Node.Labels,
+		Version:    "0.1.0", // TODO: get from build info
+		Routing:    host.DHT(),
+	})
+	if err != nil {
+		d.logger.Warn("failed to create discovery service", "error", err)
+	} else {
+		d.discovery = discoverySvc
+		d.discovery.Start()
+		d.logger.Info("discovery service started")
 	}
 
 	// Initialize package manager
@@ -126,6 +149,10 @@ func (d *Daemon) Start() error {
 // Stop stops the daemon
 func (d *Daemon) Stop() error {
 	d.logger.Info("stopping daemon")
+
+	if d.discovery != nil {
+		d.discovery.Stop()
+	}
 
 	if d.cancelFunc != nil {
 		d.cancelFunc()

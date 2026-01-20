@@ -1,4 +1,4 @@
-package commands
+package keygen
 
 import (
 	"fmt"
@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	keygenOutput string
+	output string
 )
 
-var keygenCmd = &cobra.Command{
+// Cmd represents the keygen command
+var Cmd = &cobra.Command{
 	Use:   "keygen",
 	Short: "Generate Ed25519 key pair for package signing",
 	Long: `Generate a new Ed25519 key pair for signing application packages.
@@ -22,7 +23,7 @@ The private key (controller.key) is used to sign packages.
 The public key (controller.pub) should be distributed to nodes for signature verification.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Determine output directory
-		outputDir := keygenOutput
+		outputDir := output
 		if outputDir == "" {
 			home, err := os.UserHomeDir()
 			if err != nil {
@@ -52,5 +53,5 @@ The public key (controller.pub) should be distributed to nodes for signature ver
 }
 
 func init() {
-	keygenCmd.Flags().StringVarP(&keygenOutput, "output", "o", "", "output directory for keys (default: ~/.p2p-playground/keys)")
+	Cmd.Flags().StringVarP(&output, "output", "o", "", "output directory for keys (default: ~/.p2p-playground/keys)")
 }

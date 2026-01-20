@@ -2,10 +2,16 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/viper"
 )
+
+// getHostname returns the hostname or empty string if unavailable
+func getHostname() (string, error) {
+	return os.Hostname()
+}
 
 // Config wraps viper for configuration management
 type Config struct {
@@ -114,6 +120,9 @@ type DaemonConfig struct {
 
 // NodeConfig contains P2P node configuration
 type NodeConfig struct {
+	// Name is the human-readable node name for discovery
+	Name string `yaml:"name" mapstructure:"name"`
+
 	// ListenAddrs are the addresses to listen on
 	ListenAddrs []string `yaml:"listen_addrs" mapstructure:"listen_addrs"`
 
@@ -137,6 +146,15 @@ type NodeConfig struct {
 
 	// DisableHolePunching disables hole punching for direct connections (default: false, hole punching is enabled by default)
 	DisableHolePunching bool `yaml:"disable_hole_punching" mapstructure:"disable_hole_punching"`
+
+	// DisableRelayService disables this node from acting as a relay server for other peers (default: false, relay service is enabled by default)
+	// Disable this on nodes with poor connectivity or limited bandwidth
+	DisableRelayService bool `yaml:"disable_relay_service" mapstructure:"disable_relay_service"`
+
+	// StaticRelays are static relay addresses to use for NAT traversal
+	// If empty and DHT is enabled, will use DHT to find relays dynamically
+	// Example: ["/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"]
+	StaticRelays []string `yaml:"static_relays" mapstructure:"static_relays"`
 
 	// Labels are node labels for organization
 	Labels map[string]string `yaml:"labels" mapstructure:"labels"`
@@ -297,6 +315,14 @@ func LoadControllerConfig(path string) (*ControllerConfig, error) {
 
 // applyDaemonDefaults applies default values to daemon config after unmarshaling
 func applyDaemonDefaults(cfg *DaemonConfig) {
+	if cfg.Node.Name == "" {
+		hostname, _ := getHostname()
+		if hostname != "" {
+			cfg.Node.Name = "daemon-" + hostname
+		} else {
+			cfg.Node.Name = "daemon"
+		}
+	}
 	if len(cfg.Node.ListenAddrs) == 0 {
 		cfg.Node.ListenAddrs = []string{"/ip4/0.0.0.0/tcp/9000", "/ip4/0.0.0.0/udp/9000/quic"}
 	}
@@ -356,6 +382,14 @@ func applyDaemonDefaults(cfg *DaemonConfig) {
 
 // applyControllerDefaults applies default values to controller config after unmarshaling
 func applyControllerDefaults(cfg *ControllerConfig) {
+	if cfg.Node.Name == "" {
+		hostname, _ := getHostname()
+		if hostname != "" {
+			cfg.Node.Name = "controller-" + hostname
+		} else {
+			cfg.Node.Name = "controller"
+		}
+	}
 	if len(cfg.Node.ListenAddrs) == 0 {
 		cfg.Node.ListenAddrs = []string{"/ip4/0.0.0.0/tcp/9001", "/ip4/0.0.0.0/udp/9001/quic"}
 	}

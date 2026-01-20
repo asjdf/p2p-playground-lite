@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
@@ -71,6 +72,13 @@ type HostConfig struct {
 
 	// DisableHolePunching disables hole punching for direct connections
 	DisableHolePunching bool
+
+	// DisableRelayService disables this node from acting as a relay server
+	DisableRelayService bool
+
+	// StaticRelays are static relay addresses for NAT traversal
+	// If provided, these will be used instead of DHT-based relay discovery
+	StaticRelays []string
 }
 
 // NewHost creates a new P2P host
@@ -98,13 +106,15 @@ func NewHost(ctx context.Context, config *HostConfig, logger types.Logger) (*Hos
 		opts = append(opts, libp2p.EnableNATService())
 		logger.Info("NAT service enabled")
 	}
-	if !config.DisableAutoRelay {
-		opts = append(opts, libp2p.EnableAutoRelay())
-		logger.Info("auto relay enabled")
-	}
 	if !config.DisableHolePunching {
 		opts = append(opts, libp2p.EnableHolePunching())
 		logger.Info("hole punching enabled")
+	}
+
+	// Enable relay service (enabled by default, allows this node to relay connections for others)
+	if !config.DisableRelayService {
+		opts = append(opts, libp2p.EnableRelayService())
+		logger.Info("relay service enabled - this node can relay connections for other peers")
 	}
 
 	// Add DHT routing (enabled by default)
@@ -131,6 +141,65 @@ func NewHost(ctx context.Context, config *HostConfig, logger types.Logger) (*Hos
 			dhtModeStr = "server"
 		}
 		logger.Info("DHT enabled", "mode", dhtModeStr)
+
+		// Enable AutoRelay (only when DHT is enabled, unless static relays are configured)
+		if !config.DisableAutoRelay {
+			// Use static relays if provided, otherwise use DHT peer source
+			if len(config.StaticRelays) > 0 {
+				staticRelays := parseStaticRelays(config.StaticRelays, logger)
+				if len(staticRelays) > 0 {
+					opts = append(opts, libp2p.EnableAutoRelayWithStaticRelays(staticRelays,
+						autorelay.WithBackoff(30*time.Second),
+						autorelay.WithMinInterval(time.Minute),
+					))
+					logger.Info("auto relay enabled with static relays", "count", len(staticRelays))
+				}
+			} else {
+				// Use DHT as peer source for relay discovery
+				opts = append(opts, libp2p.EnableAutoRelayWithPeerSource(
+					func(ctx context.Context, numPeers int) <-chan peer.AddrInfo {
+						ch := make(chan peer.AddrInfo)
+						go func() {
+							defer close(ch)
+							// Wait a bit for DHT to initialize
+							time.Sleep(2 * time.Second)
+							if kadDHT == nil {
+								return
+							}
+							// Find peers from DHT
+							for _, p := range kadDHT.RoutingTable().ListPeers() {
+								select {
+								case ch <- peer.AddrInfo{ID: p}:
+								case <-ctx.Done():
+									return
+								}
+								if numPeers--; numPeers <= 0 {
+									return
+								}
+							}
+						}()
+						return ch
+					},
+					autorelay.WithBackoff(30*time.Second),
+					autorelay.WithMinInterval(time.Minute),
+				))
+				logger.Info("auto relay enabled with DHT peer source")
+			}
+		}
+	} else if !config.DisableAutoRelay {
+		// DHT is disabled, but we can still use static relays if provided
+		if len(config.StaticRelays) > 0 {
+			staticRelays := parseStaticRelays(config.StaticRelays, logger)
+			if len(staticRelays) > 0 {
+				opts = append(opts, libp2p.EnableAutoRelayWithStaticRelays(staticRelays,
+					autorelay.WithBackoff(30*time.Second),
+					autorelay.WithMinInterval(time.Minute),
+				))
+				logger.Info("auto relay enabled with static relays (DHT disabled)", "count", len(staticRelays))
+			}
+		} else {
+			logger.Warn("auto relay disabled: requires DHT or static relays for peer discovery")
+		}
 	}
 
 	// Add PSK if authentication is enabled
@@ -198,6 +267,16 @@ func NewHost(ctx context.Context, config *HostConfig, logger types.Logger) (*Hos
 // ID returns the host's peer ID
 func (h *Host) ID() string {
 	return h.host.ID().String()
+}
+
+// LibP2PHost returns the underlying libp2p host for advanced usage
+func (h *Host) LibP2PHost() host.Host {
+	return h.host
+}
+
+// DHT returns the DHT routing table (may be nil if DHT is disabled)
+func (h *Host) DHT() *dht.IpfsDHT {
+	return h.dht
 }
 
 // Addrs returns the host's listening addresses
@@ -298,6 +377,70 @@ func (h *Host) Peers() []PeerInfo {
 	}
 
 	return result
+}
+
+// NetworkStats contains network diagnostic information
+type NetworkStats struct {
+	ConnectedPeers  int
+	DHTRoutingTable int
+	DHTMode         string
+}
+
+// GetNetworkStats returns current network statistics
+func (h *Host) GetNetworkStats() NetworkStats {
+	stats := NetworkStats{
+		ConnectedPeers: len(h.host.Network().Peers()),
+	}
+
+	if h.dht != nil {
+		stats.DHTRoutingTable = h.dht.RoutingTable().Size()
+		// Convert DHT mode to string
+		mode := h.dht.Mode()
+		switch mode {
+		case dht.ModeServer:
+			stats.DHTMode = "server"
+		case dht.ModeClient:
+			stats.DHTMode = "client"
+		case dht.ModeAuto:
+			stats.DHTMode = "auto"
+		case dht.ModeAutoServer:
+			stats.DHTMode = "autoserver"
+		default:
+			stats.DHTMode = "unknown"
+		}
+	}
+
+	return stats
+}
+
+// StartDiagnosticLogging starts periodic logging of network status
+func (h *Host) StartDiagnosticLogging(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				stats := h.GetNetworkStats()
+				h.logger.Info("network status",
+					"connected_peers", stats.ConnectedPeers,
+					"dht_routing_table_size", stats.DHTRoutingTable,
+					"dht_mode", stats.DHTMode,
+				)
+
+				// Log peer details if there are connections
+				peers := h.Peers()
+				if len(peers) > 0 {
+					for _, p := range peers {
+						h.logger.Debug("connected peer", "id", p.ID, "addrs", p.Addrs)
+					}
+				}
+			}
+		}
+	}()
 }
 
 // discoveryNotifee handles peer discovery
@@ -447,4 +590,30 @@ func connectToBootstrapPeers(ctx context.Context, h host.Host, bootstrapPeers []
 
 	wg.Wait()
 	logger.Info("bootstrap peer connections completed")
+}
+
+// parseStaticRelays parses static relay addresses into peer.AddrInfo structs
+func parseStaticRelays(relayAddrs []string, logger types.Logger) []peer.AddrInfo {
+	var relays []peer.AddrInfo
+
+	for _, addrStr := range relayAddrs {
+		// Parse multiaddr
+		maddr, err := multiaddr.NewMultiaddr(addrStr)
+		if err != nil {
+			logger.Warn("invalid static relay address", "addr", addrStr, "error", err)
+			continue
+		}
+
+		// Extract peer info
+		peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			logger.Warn("failed to parse static relay peer info", "addr", addrStr, "error", err)
+			continue
+		}
+
+		relays = append(relays, *peerInfo)
+		logger.Debug("added static relay", "peer", peerInfo.ID, "addrs", peerInfo.Addrs)
+	}
+
+	return relays
 }

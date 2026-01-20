@@ -1,4 +1,4 @@
-package commands
+package sign
 
 import (
 	"encoding/hex"
@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	signKeyPath string
+	keyPath string
 )
 
-var signCmd = &cobra.Command{
+// Cmd represents the sign command
+var Cmd = &cobra.Command{
 	Use:   "sign [package]",
 	Short: "Sign an application package",
 	Long: `Sign an application package with your private key.
@@ -30,17 +31,17 @@ The signature will be embedded in the deployment request and verified by nodes.`
 		}
 
 		// Determine key path
-		keyPath := signKeyPath
-		if keyPath == "" {
+		kp := keyPath
+		if kp == "" {
 			home, err := os.UserHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
-			keyPath = filepath.Join(home, ".p2p-playground", "keys", "controller.key")
+			kp = filepath.Join(home, ".p2p-playground", "keys", "controller.key")
 		}
 
 		// Load private key
-		signer, err := security.LoadSigner(keyPath)
+		signer, err := security.LoadSigner(kp)
 		if err != nil {
 			return fmt.Errorf("failed to load private key: %w", err)
 		}
@@ -69,5 +70,5 @@ The signature will be embedded in the deployment request and verified by nodes.`
 }
 
 func init() {
-	signCmd.Flags().StringVarP(&signKeyPath, "key", "k", "", "path to private key file (default: ~/.p2p-playground/keys/controller.key)")
+	Cmd.Flags().StringVarP(&keyPath, "key", "k", "", "path to private key file (default: ~/.p2p-playground/keys/controller.key)")
 }

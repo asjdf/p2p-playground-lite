@@ -1,4 +1,4 @@
-package commands
+package psk
 
 import (
 	"fmt"
@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	pskOutputPath string
+	outputPath string
 )
 
-var pskCmd = &cobra.Command{
+// Cmd represents the psk command
+var Cmd = &cobra.Command{
 	Use:   "psk",
 	Short: "Generate a pre-shared key for private P2P network",
 	Long: `Generate a pre-shared key (PSK) for creating a private P2P network.
@@ -28,31 +29,31 @@ Example:
 		fmt.Println("Generating pre-shared key...")
 
 		// Generate PSK
-		psk, err := security.GeneratePSK()
+		pskBytes, err := security.GeneratePSK()
 		if err != nil {
 			return fmt.Errorf("failed to generate PSK: %w", err)
 		}
 
 		// Determine output path
-		outputPath := pskOutputPath
-		if outputPath == "" {
+		outPath := outputPath
+		if outPath == "" {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
-			outputPath = filepath.Join(homeDir, ".p2p-playground", "psk")
+			outPath = filepath.Join(homeDir, ".p2p-playground", "psk")
 		}
 
 		// Save PSK to file
-		if err := security.SavePSK(psk, outputPath); err != nil {
+		if err := security.SavePSK(pskBytes, outPath); err != nil {
 			return fmt.Errorf("failed to save PSK: %w", err)
 		}
 
-		encoded := security.EncodePSK(psk)
+		encoded := security.EncodePSK(pskBytes)
 
 		fmt.Println()
 		fmt.Println("✓ PSK generated successfully!")
-		fmt.Printf("  File: %s\n", outputPath)
+		fmt.Printf("  File: %s\n", outPath)
 		fmt.Println()
 		fmt.Println("⚠️  Keep this key secure and never share it publicly.")
 		fmt.Println("📤 Distribute this key to all nodes that should join your network.")
@@ -71,6 +72,5 @@ Example:
 }
 
 func init() {
-	pskCmd.Flags().StringVarP(&pskOutputPath, "output", "o", "", "output path for PSK file (default: ~/.p2p-playground/psk)")
-	rootCmd.AddCommand(pskCmd)
+	Cmd.Flags().StringVarP(&outputPath, "output", "o", "", "output path for PSK file (default: ~/.p2p-playground/psk)")
 }
